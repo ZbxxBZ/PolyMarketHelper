@@ -165,6 +165,7 @@ def add_rule():
     threshold = request.form.get("threshold", "")
     sell_percent = request.form.get("sell_percent", "")
     price_offset = request.form.get("price_offset", "0")
+    sell_mode = request.form.get("sell_mode", "limit")
 
     if not token_id or not rule_type or not threshold or not sell_percent:
         flash("请填写所有必填字段", "error")
@@ -190,8 +191,9 @@ def add_rule():
         flash("价格偏移必须在 -0.10 到 +0.10 之间", "error")
         return redirect(url_for("rules_page"))
 
-    db.add_rule(token_id, market_name, outcome, rule_type, threshold, sell_percent, price_offset)
-    flash(f"规则已添加: {'止损' if rule_type == 'stop_loss' else '止盈'} @ {threshold}，价格偏移 {price_offset:+.2f}", "success")
+    db.add_rule(token_id, market_name, outcome, rule_type, threshold, sell_percent, price_offset, sell_mode)
+    mode_text = "市价" if sell_mode == "market" else f"限价(偏移 {price_offset:+.2f})"
+    flash(f"规则已添加: {'止损' if rule_type == 'stop_loss' else '止盈'} @ {threshold}，{mode_text}", "success")
     return redirect(url_for("rules_page"))
 
 

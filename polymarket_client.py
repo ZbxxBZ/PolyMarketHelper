@@ -211,3 +211,35 @@ def sell(token_id, size, price):
     except Exception as e:
         logger.exception("卖单提交失败: token=%s", token_id)
         return None, str(e)
+
+
+def market_sell(token_id, size):
+    """提交 FOK 市价卖单（立即以盘口价成交，不成交则取消）
+
+    返回: (response_dict, error_msg|None)
+    """
+    try:
+        from py_clob_client.clob_types import MarketOrderArgs, OrderType, PartialCreateOrderOptions
+        from py_clob_client.order_builder.constants import SELL
+
+        client = _get_client()
+
+        market_info = _get_market_info(token_id)
+        tick_size = market_info["tick_size"]
+        neg_risk = market_info["neg_risk"]
+
+        order_args = MarketOrderArgs(
+            token_id=token_id,
+            amount=size,
+            side=SELL,
+        )
+        options = PartialCreateOrderOptions(tick_size=tick_size, neg_risk=neg_risk)
+        signed = client.create_market_order(order_args, options=options)
+        resp = client.post_order(signed, OrderType.FOK)
+        logger.info("市价卖单提交成功: token=%s, size=%s, resp=%s",
+                     token_id, size, resp)
+        return resp, None
+
+    except Exception as e:
+        logger.exception("市价卖单提交失败: token=%s", token_id)
+        return None, str(e)

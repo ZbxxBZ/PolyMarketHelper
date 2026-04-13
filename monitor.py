@@ -116,16 +116,22 @@ class PriceMonitor:
         if sell_amount <= 0:
             sell_amount = math.floor(pos["size"] * 100) / 100
 
-        # 根据 price_offset 计算卖出价格
-        # 正数 = 高于市价挂单，负数 = 低于市价快速成交，0 = 按市价
-        price_offset = rule.get("price_offset", 0.01)
-        sell_price = round(trigger_price + price_offset, 2)
-        if sell_price < 0.01:
-            sell_price = 0.01
-        if sell_price > 0.99:
-            sell_price = 0.99
+        sell_mode = rule.get("sell_mode", "limit")
 
-        resp, err = pm.sell(rule["token_id"], sell_amount, sell_price)
+        if sell_mode == "market":
+            # 市价卖出（FOK），立即以盘口价成交
+            resp, err = pm.market_sell(rule["token_id"], sell_amount)
+            price_desc = "市价"
+        else:
+            # 限价卖出（GTC）
+            price_offset = rule.get("price_offset", 0)
+            sell_price = round(trigger_price + price_offset, 2)
+            if sell_price < 0.01:
+                sell_price = 0.01
+            if sell_price > 0.99:
+                sell_price = 0.99
+            resp, err = pm.sell(rule["token_id"], sell_amount, sell_price)
+            price_desc = f"{sell_price}"
 
         if err:
             db.add_log(
@@ -133,14 +139,18 @@ class PriceMonitor:
                 rule["rule_type"], rule["threshold"], trigger_price,
                 rule["sell_percent"], sell_amount, "error", f"卖出失败: {err}",
             )
+            if sell_mode == "market":
+                # 市价单失败，保持规则启用，下次轮询再试
+                logger.info("规则 #%d 市价卖出失败，保持启用，下次重试", rule["id"])
+                return
         else:
             db.add_log(
                 rule["id"], rule["token_id"], rule["market_name"],
                 rule["rule_type"], rule["threshold"], trigger_price,
                 rule["sell_percent"], sell_amount, "success",
-                f"卖单已提交: {sell_amount} 份 @ {sell_price}",
+                f"卖单已提交: {sell_amount} 份 @ {price_desc}",
             )
 
-        # 触发后自动禁用规则
+        # 成功后或限价单失败后禁用规则
         db.disable_rule(rule["id"])
         logger.info("规则 #%d 已自动禁用", rule["id"])

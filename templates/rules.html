@@ -42,12 +42,25 @@
                 <input type="number" name="sell_percent" step="1" min="1" max="100" value="100" required>
             </div>
             <div class="form-group">
+                <label>卖出方式</label>
+                <select name="sell_mode" id="sell_mode" onchange="togglePriceOffset()">
+                    <option value="market">市价卖出（立即成交）</option>
+                    <option value="limit">限价卖出（挂单等待）</option>
+                </select>
+            </div>
+            <div class="form-group" id="price_offset_group" style="display:none;">
                 <label>价格偏移</label>
-                <input type="number" name="price_offset" step="0.01" min="-0.10" max="0.10" value="0" required>
-                <small style="color:#8b949e;">+0.01=高于市价挂单, 0=按市价, -0.01=低于市价快速成交</small>
+                <input type="number" name="price_offset" step="0.01" min="-0.10" max="0.10" value="0">
             </div>
         </div>
         <button type="submit" class="btn">添加规则</button>
+    </form>
+    <script>
+    function togglePriceOffset() {
+        var mode = document.getElementById('sell_mode').value;
+        document.getElementById('price_offset_group').style.display = mode === 'limit' ? 'flex' : 'none';
+    }
+    </script>
     </form>
 </div>
 
@@ -63,7 +76,7 @@
                 <th>类型</th>
                 <th>阈值</th>
                 <th>卖出比例</th>
-                <th>价格偏移</th>
+                <th>卖出方式</th>
                 <th>状态</th>
                 <th>创建时间</th>
                 <th>操作</th>
@@ -79,7 +92,7 @@
                 <td>{{ '止损' if r.rule_type == 'stop_loss' else '止盈' }}</td>
                 <td>{{ r.threshold }}</td>
                 <td>{{ r.sell_percent }}%</td>
-                <td>{{ '%+.2f' | format(r.price_offset) }}</td>
+                <td>{% if r.sell_mode == 'market' %}市价{% else %}限价({{ '%+.2f' | format(r.price_offset) }}){% endif %}</td>
                 <td>
                     {% if r.triggered_at %}
                     <span class="badge badge-triggered">已触发</span>

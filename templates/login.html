@@ -6,68 +6,179 @@
     <title>登录 - Polymarket 自动交易</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        .login-container {
-            max-width: 400px;
-            margin: 100px auto;
-            padding: 40px;
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
             background: #0d1117;
+        }
+
+        .login-card {
+            width: 380px;
+            background: #161b22;
             border: 1px solid #30363d;
-            border-radius: 8px;
+            border-radius: 12px;
+            overflow: hidden;
         }
-        .login-container h1 {
+
+        .login-header {
+            padding: 40px 30px 30px;
             text-align: center;
-            margin-bottom: 30px;
-            color: #58a6ff;
+            border-bottom: 1px solid #21262d;
         }
+
+        .login-logo {
+            width: 56px;
+            height: 56px;
+            margin: 0 auto 16px;
+            background: linear-gradient(135deg, #58a6ff, #3fb950);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-logo svg {
+            width: 28px;
+            height: 28px;
+            fill: white;
+        }
+
+        .login-header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #e6edf3;
+            margin-bottom: 6px;
+        }
+
+        .login-header p {
+            font-size: 13px;
+            color: #8b949e;
+        }
+
+        .login-body {
+            padding: 30px;
+        }
+
         .login-form {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 16px;
         }
-        .login-form input {
-            padding: 12px;
-            background: #161b22;
+
+        .input-group {
+            position: relative;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: #8b949e;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 11px 14px;
+            background: #0d1117;
             border: 1px solid #30363d;
-            border-radius: 6px;
-            color: #c9d1d9;
-            font-size: 16px;
+            border-radius: 8px;
+            color: #e6edf3;
+            font-size: 15px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            box-sizing: border-box;
         }
-        .login-form input:focus {
+
+        .input-group input:focus {
             outline: none;
             border-color: #58a6ff;
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
         }
-        .login-form button {
+
+        .login-btn {
+            width: 100%;
             padding: 12px;
-            background: #238636;
+            background: linear-gradient(135deg, #238636, #2ea043);
             color: white;
             border: none;
-            border-radius: 6px;
-            font-size: 16px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
             cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+            margin-top: 4px;
         }
-        .login-form button:hover {
-            background: #2ea043;
+
+        .login-btn:hover {
+            opacity: 0.9;
+        }
+
+        .login-btn:active {
+            transform: scale(0.98);
+        }
+
+        .flash {
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 13px;
+        }
+
+        .flash-error {
+            background: rgba(248, 81, 73, 0.1);
+            border: 1px solid rgba(248, 81, 73, 0.3);
+            color: #f85149;
+        }
+
+        .login-footer {
+            padding: 16px 30px;
+            border-top: 1px solid #21262d;
+            text-align: center;
+        }
+
+        .login-footer span {
+            font-size: 12px;
+            color: #484f58;
         }
     </style>
 </head>
 <body>
-    <div class="login-container">
-        <h1>🔒 Polymarket 自动交易</h1>
+    <div class="login-card">
+        <div class="login-header">
+            <div class="login-logo">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+            </div>
+            <h1>Polymarket Auto Trade</h1>
+            <p>请输入密码以继续</p>
+        </div>
 
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <div class="flash-messages">
+        <div class="login-body">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
             {% for category, message in messages %}
             <div class="flash flash-{{ category }}">{{ message }}</div>
             {% endfor %}
-        </div>
-        {% endif %}
-        {% endwith %}
+            {% endif %}
+            {% endwith %}
 
-        <form method="POST" class="login-form">
-            <input type="password" name="password" placeholder="请输入访问密码" required autofocus>
-            <button type="submit">登录</button>
-        </form>
+            <form method="POST" class="login-form">
+                <div class="input-group">
+                    <label for="password">访问密码</label>
+                    <input type="password" id="password" name="password" placeholder="输入密码" required autofocus>
+                </div>
+                <button type="submit" class="login-btn">登录</button>
+            </form>
+        </div>
+
+        <div class="login-footer">
+            <span>Polymarket Auto Trade System</span>
+        </div>
     </div>
 </body>
 </html>

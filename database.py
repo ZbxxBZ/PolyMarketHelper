@@ -43,6 +43,7 @@ def init_db():
             threshold REAL NOT NULL,
             sell_percent REAL NOT NULL CHECK(sell_percent > 0 AND sell_percent <= 100),
             price_offset REAL NOT NULL DEFAULT 0,
+            sell_mode TEXT NOT NULL DEFAULT 'limit' CHECK(sell_mode IN ('limit', 'market')),
             enabled INTEGER NOT NULL DEFAULT 1,
             created_at REAL NOT NULL,
             triggered_at REAL
@@ -88,13 +89,13 @@ def get_enabled_rules():
     return [dict(r) for r in rows]
 
 
-def add_rule(token_id, market_name, outcome, rule_type, threshold, sell_percent, price_offset=0):
+def add_rule(token_id, market_name, outcome, rule_type, threshold, sell_percent, price_offset=0, sell_mode='limit'):
     conn = get_connection()
     conn.execute(
         """INSERT INTO auto_sell_rules
-           (token_id, market_name, outcome, rule_type, threshold, sell_percent, price_offset, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (token_id, market_name, outcome, rule_type, threshold, sell_percent, price_offset, time.time()),
+           (token_id, market_name, outcome, rule_type, threshold, sell_percent, price_offset, sell_mode, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (token_id, market_name, outcome, rule_type, threshold, sell_percent, price_offset, sell_mode, time.time()),
     )
     conn.commit()
     conn.close()
