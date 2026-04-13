@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}系统设置{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>系统设置</h1>
+</div>
+
+<div class="settings-container">
+    <form method="POST" action="{{ url_for('settings_page') }}" class="settings-form">
+        <div class="form-group">
+            <label for="monitor_interval">监控间隔（秒）</label>
+            <input type="number" id="monitor_interval" name="monitor_interval"
+                   value="{{ current_interval }}" min="1" required>
+            <small>建议：10-30 秒。过快会增加 API 消耗。</small>
+        </div>
+
+        <div class="form-group">
+            <label for="web_password">访问密码</label>
+            <input type="password" id="web_password" name="web_password"
+                   value="{{ current_password }}" placeholder="留空则不需要密码">
+            <small>修改后需要重新登录。留空则任何人都可以访问。</small>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn-primary">保存设置</button>
+            <a href="{{ url_for('positions_page') }}" class="btn-secondary">取消</a>
+        </div>
+    </form>
+
+    <div class="settings-info">
+        <h3>当前状态</h3>
+        <ul>
+            <li>监控状态：<strong>{{ '运行中' if monitor_running else '已停止' }}</strong></li>
+            <li>当前间隔：<strong>{{ current_interval }} 秒</strong></li>
+            <li>密码保护：<strong>{{ '已启用' if current_password else '未启用' }}</strong></li>
+        </ul>
+        <p class="note">修改监控间隔后会立即生效，无需重启。</p>
+    </div>
+</div>
+
+<style>
+.settings-container {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.settings-form {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 30px;
+    margin-bottom: 30px;
+}
+
+.form-group {
+    margin-bottom: 25px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #58a6ff;
+    font-weight: 500;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 10px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #c9d1d9;
+    font-size: 14px;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #58a6ff;
+}
+
+.form-group small {
+    display: block;
+    margin-top: 5px;
+    color: #8b949e;
+    font-size: 12px;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 30px;
+}
+
+.btn-primary, .btn-secondary {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-primary {
+    background: #238636;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2ea043;
+}
+
+.btn-secondary {
+    background: #21262d;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+}
+
+.btn-secondary:hover {
+    background: #30363d;
+}
+
+.settings-info {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.settings-info h3 {
+    margin-top: 0;
+    color: #58a6ff;
+}
+
+.settings-info ul {
+    list-style: none;
+    padding: 0;
+}
+
+.settings-info li {
+    padding: 8px 0;
+    border-bottom: 1px solid #21262d;
+}
+
+.settings-info li:last-child {
+    border-bottom: none;
+}
+
+.note {
+    margin-top: 15px;
+    padding: 10px;
+    background: #1c2128;
+    border-left: 3px solid #58a6ff;
+    color: #8b949e;
+    font-size: 13px;
+}
+</style>
+{% endblock %}

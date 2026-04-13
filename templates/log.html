@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}执行日志 - Polymarket 自动交易{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>执行日志</h1>
+    <button class="btn" onclick="location.reload()">刷新</button>
+</div>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>时间</th>
+            <th>规则 ID</th>
+            <th>市场</th>
+            <th>类型</th>
+            <th>阈值</th>
+            <th>触发价格</th>
+            <th>卖出比例</th>
+            <th>卖出数量</th>
+            <th>状态</th>
+            <th>详情</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% if logs %}
+        {% for l in logs %}
+        <tr>
+            <td>{{ l.created_at | datetimeformat }}</td>
+            <td>{{ l.rule_id or '-' }}</td>
+            <td class="market-name">{{ l.market_name or '-' }}</td>
+            <td>{{ '止损' if l.rule_type == 'stop_loss' else '止盈' }}</td>
+            <td>{{ l.threshold }}</td>
+            <td>{{ l.trigger_price }}</td>
+            <td>{{ l.sell_percent }}%</td>
+            <td>{{ l.sell_amount or '-' }}</td>
+            <td>
+                {% if l.status == 'success' %}
+                <span class="badge badge-active">成功</span>
+                {% elif l.status == 'error' %}
+                <span class="badge badge-danger">失败</span>
+                {% else %}
+                <span class="badge badge-inactive">{{ l.status }}</span>
+                {% endif %}
+            </td>
+            <td class="message">{{ l.message or '-' }}</td>
+        </tr>
+        {% endfor %}
+        {% else %}
+        <tr><td colspan="10">暂无执行日志</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}

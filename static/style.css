@@ -1,0 +1,393 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0f1117;
+    color: #e1e4e8;
+    line-height: 1.6;
+}
+
+/* 导航栏 */
+.navbar {
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    height: 56px;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    gap: 24px;
+}
+
+.nav-brand {
+    font-size: 18px;
+    font-weight: 700;
+    color: #58a6ff;
+    white-space: nowrap;
+}
+
+.nav-links {
+    display: flex;
+    gap: 4px;
+}
+
+.nav-links a {
+    color: #8b949e;
+    text-decoration: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: background 0.2s, color 0.2s;
+}
+
+.nav-links a:hover {
+    color: #e1e4e8;
+    background: #21262d;
+}
+
+.nav-links a.active {
+    color: #ffffff;
+    background: #30363d;
+}
+
+.nav-status {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #8b949e;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-dot.running {
+    background: #3fb950;
+    box-shadow: 0 0 6px #3fb950;
+}
+
+.status-dot.stopped {
+    background: #f85149;
+}
+
+/* 容器 */
+.container {
+    max-width: 1200px;
+    margin: 24px auto;
+    padding: 0 24px;
+}
+
+/* 页面头部 */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.page-header h1 {
+    font-size: 24px;
+    font-weight: 600;
+}
+
+/* 闪烁消息 */
+.flash {
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+.flash.success {
+    background: #0d1f0d;
+    border: 1px solid #238636;
+    color: #3fb950;
+}
+
+.flash.error {
+    background: #1f0d0d;
+    border: 1px solid #f85149;
+    color: #f85149;
+}
+
+.flash.info {
+    background: #0d1a2f;
+    border: 1px solid #58a6ff;
+    color: #58a6ff;
+}
+
+/* 表格 */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #161b22;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid #30363d;
+}
+
+.data-table th {
+    background: #21262d;
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #8b949e;
+    border-bottom: 1px solid #30363d;
+}
+
+.data-table td {
+    padding: 10px 12px;
+    font-size: 14px;
+    border-bottom: 1px solid #21262d;
+}
+
+.data-table tbody tr:hover {
+    background: #1c2128;
+}
+
+.data-table .loading {
+    text-align: center;
+    color: #8b949e;
+    padding: 40px;
+}
+
+.market-name {
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.positive { color: #3fb950; }
+.negative { color: #f85149; }
+
+.disabled-row {
+    opacity: 0.5;
+}
+
+/* 卡片 */
+.card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.card h2 {
+    font-size: 18px;
+    margin-bottom: 16px;
+    font-weight: 600;
+}
+
+/* 表单 */
+.rule-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.form-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.form-group {
+    flex: 1;
+    min-width: 180px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.form-group label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #8b949e;
+    text-transform: uppercase;
+}
+
+.form-group input,
+.form-group select {
+    padding: 8px 12px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #e1e4e8;
+    font-size: 14px;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #58a6ff;
+    box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.3);
+}
+
+/* 按钮 */
+.btn {
+    display: inline-block;
+    padding: 8px 16px;
+    background: #238636;
+    color: #fff;
+    border: 1px solid #2ea043;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.2s;
+}
+
+.btn:hover { background: #2ea043; }
+
+.btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+.btn-warning {
+    background: #d29922;
+    border-color: #d29922;
+}
+
+.btn-warning:hover { background: #e3b341; }
+
+.btn-danger {
+    background: #da3633;
+    border-color: #f85149;
+}
+
+.btn-danger:hover { background: #f85149; }
+
+.btn-success {
+    background: #238636;
+    border-color: #2ea043;
+}
+
+/* 徽章 */
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.badge-active { background: #0d1f0d; color: #3fb950; border: 1px solid #238636; }
+.badge-inactive { background: #21262d; color: #8b949e; border: 1px solid #30363d; }
+.badge-triggered { background: #2d1b00; color: #d29922; border: 1px solid #d29922; }
+.badge-danger { background: #1f0d0d; color: #f85149; border: 1px solid #f85149; }
+
+/* 汇总 */
+.summary {
+    display: flex;
+    gap: 24px;
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+/* 操作列 */
+.actions {
+    white-space: nowrap;
+    display: flex;
+    gap: 4px;
+}
+
+.message {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Setup 页面 */
+.setup-container {
+    max-width: 700px;
+    margin: 60px auto;
+    padding: 0 24px;
+}
+
+.setup-container h1 {
+    font-size: 28px;
+    color: #58a6ff;
+    margin-bottom: 8px;
+}
+
+.setup-container h2 {
+    font-size: 18px;
+    color: #8b949e;
+    margin-bottom: 32px;
+}
+
+.setup-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.step {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 20px;
+}
+
+.step h3 {
+    font-size: 16px;
+    margin-bottom: 8px;
+    color: #58a6ff;
+}
+
+.step p, .step li {
+    font-size: 14px;
+    color: #c9d1d9;
+}
+
+.step ol {
+    padding-left: 20px;
+    margin-top: 8px;
+}
+
+.step li {
+    margin-bottom: 4px;
+}
+
+.step code, .step pre {
+    background: #0d1117;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #79c0ff;
+}
+
+.step pre {
+    padding: 12px;
+    margin-top: 8px;
+    overflow-x: auto;
+    white-space: pre;
+}
+
+.setup-note {
+    margin-top: 24px;
+    padding: 12px 16px;
+    background: #2d1b00;
+    border: 1px solid #d29922;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #d29922;
+}

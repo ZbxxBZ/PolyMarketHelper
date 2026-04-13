@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}持仓总览 - Polymarket 自动交易{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>持仓总览</h1>
+    <button class="btn" onclick="refreshPositions()">刷新</button>
+</div>
+
+<div id="positions-error" class="flash error" style="display:none;"></div>
+
+<table class="data-table" id="positions-table">
+    <thead>
+        <tr>
+            <th>市场</th>
+            <th>方向</th>
+            <th>数量</th>
+            <th>均价</th>
+            <th>当前价格</th>
+            <th>成本</th>
+            <th>现值</th>
+            <th>盈亏</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody id="positions-body">
+        <tr><td colspan="9" class="loading">加载中...</td></tr>
+    </tbody>
+</table>
+
+<div id="total-summary" class="summary" style="display:none;">
+    <span>总成本: <strong id="total-cost">-</strong></span>
+    <span>总现值: <strong id="total-value">-</strong></span>
+    <span>总盈亏: <strong id="total-pnl">-</strong></span>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', refreshPositions);
+
+function refreshPositions() {
+    fetch('/api/positions')
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('positions-body');
+            const errDiv = document.getElementById('positions-error');
+            const summary = document.getElementById('total-summary');
+
+            if (data.error) {
+                errDiv.textContent = '错误: ' + data.error;
+                errDiv.style.display = 'block';
+                tbody.innerHTML = '<tr><td colspan="9">获取持仓失败</td></tr>';
+                summary.style.display = 'none';
+                return;
+            }
+
+            errDiv.style.display = 'none';
+            const positions = data.positions;
+
+            if (!positions || positions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9">暂无持仓</td></tr>';
+                summary.style.display = 'none';
+                return;
+            }
+
+            let totalCost = 0, totalValue = 0, totalPnl = 0;
+            let html = '';
+            positions.forEach(p => {
+                totalCost += p.cost;
+                totalValue += p.value;
+                totalPnl += p.pnl;
+                const pnlClass = p.pnl >= 0 ? 'positive' : 'negative';
+                html += `<tr>
+                    <td class="market-name" title="${p.token_id}">${p.market_name}</td>
+                    <td>${p.outcome || '-'}</td>
+                    <td>${p.size}</td>
+                    <td>${p.avg_price}</td>
+                    <td class="cur-price">${p.cur_price}</td>
+                    <td>${p.cost.toFixed(4)}</td>
+                    <td>${p.value.toFixed(4)}</td>
+                    <td class="${pnlClass}">${p.pnl >= 0 ? '+' : ''}${p.pnl.toFixed(4)}</td>
+                    <td>
+                        <a href="/rules?token_id=${encodeURIComponent(p.token_id)}&market_name=${encodeURIComponent(p.market_name)}&outcome=${encodeURIComponent(p.outcome || '')}" class="btn btn-sm">设置规则</a>
+                    </td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+
+            document.getElementById('total-cost').textContent = totalCost.toFixed(4);
+            document.getElementById('total-value').textContent = totalValue.toFixed(4);
+            const pnlEl = document.getElementById('total-pnl');
+            pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(4);
+            pnlEl.className = totalPnl >= 0 ? 'positive' : 'negative';
+            summary.style.display = 'flex';
+        })
+        .catch(err => {
+            document.getElementById('positions-error').textContent = '网络错误: ' + err;
+            document.getElementById('positions-error').style.display = 'block';
+        });
+}
+
+// 自动刷新（每 30 秒）
+setInterval(refreshPositions, 30000);
+</script>
+{% endblock %}

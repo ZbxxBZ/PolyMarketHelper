@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polymarket 自动交易 - 初始配置</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="setup-container">
+        <h1>Polymarket 自动交易系统</h1>
+        <h2>首次运行配置</h2>
+
+        <div class="setup-steps">
+            <div class="step">
+                <h3>第1步：获取私钥</h3>
+                <p>从 MetaMask 或其他钱包导出与 Polymarket 关联账户的私钥。</p>
+                <ol>
+                    <li>打开 MetaMask → 账户详情 → 导出私钥</li>
+                    <li>输入密码确认</li>
+                    <li>复制以 <code>0x</code> 开头的私钥字符串</li>
+                </ol>
+            </div>
+
+            <div class="step">
+                <h3>第2步：获取 Funder 地址</h3>
+                <p>这是您在 Polymarket 上的代理钱包（Proxy Wallet）地址。</p>
+                <ol>
+                    <li>访问 <a href="https://polymarket.com" target="_blank">polymarket.com</a> 并登录</li>
+                    <li>进入设置页面或充值页面</li>
+                    <li>复制显示的存款地址（这是您的 Proxy/Funder 地址）</li>
+                </ol>
+            </div>
+
+            <div class="step">
+                <h3>第3步：配置 .env 文件</h3>
+                <p>在项目根目录创建 <code>.env</code> 文件，填入以下内容：</p>
+                <pre>
+PRIVATE_KEY=0x你的私钥
+FUNDER_ADDRESS=0x你的Funder地址
+MONITOR_INTERVAL=30</pre>
+            </div>
+
+            <div class="step">
+                <h3>第4步：重启程序</h3>
+                <p>配置完成后，重新启动 <code>python main.py</code>，即可使用自动交易功能。</p>
+            </div>
+        </div>
+
+        <div class="setup-note">
+            <strong>安全提示：</strong> 私钥仅存储在本地 .env 文件中，不会上传到任何服务器。
+            请确保 .env 文件已被 .gitignore 忽略。
+        </div>
+    </div>
+</body>
+</html>

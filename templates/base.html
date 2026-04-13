@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Polymarket 自动交易{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">Polymarket 自动交易</div>
+        <div class="nav-links">
+            <a href="{{ url_for('positions_page') }}" class="{% if request.endpoint == 'positions_page' %}active{% endif %}">持仓总览</a>
+            <a href="{{ url_for('rules_page') }}" class="{% if request.endpoint == 'rules_page' %}active{% endif %}">自动卖出规则</a>
+            <a href="{{ url_for('log_page') }}" class="{% if request.endpoint == 'log_page' %}active{% endif %}">执行日志</a>
+            <a href="{{ url_for('system_log_page') }}" class="{% if request.endpoint == 'system_log_page' %}active{% endif %}">系统日志</a>
+            <a href="{{ url_for('settings_page') }}" class="{% if request.endpoint == 'settings_page' %}active{% endif %}">系统设置</a>
+        </div>
+        <div class="nav-status">
+            <span id="monitor-status" class="status-dot {{ 'running' if monitor_running else 'stopped' }}"></span>
+            <span>监控: {{ '运行中' if monitor_running else '已停止' }}</span>
+            {% if config.WEB_PASSWORD %}
+            <a href="{{ url_for('logout') }}" style="margin-left: 20px; color: #f85149;">退出</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

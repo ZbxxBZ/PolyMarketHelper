@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}系统日志{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>系统日志</h1>
+    <div class="header-actions">
+        <button class="btn" onclick="refreshLogs()">刷新</button>
+        <button class="btn-secondary" onclick="clearLogs()">清空日志</button>
+    </div>
+</div>
+
+<div class="log-filters">
+    <label>
+        <input type="checkbox" id="filter-info" checked onchange="filterLogs()"> INFO
+    </label>
+    <label>
+        <input type="checkbox" id="filter-warning" checked onchange="filterLogs()"> WARNING
+    </label>
+    <label>
+        <input type="checkbox" id="filter-error" checked onchange="filterLogs()"> ERROR
+    </label>
+</div>
+
+<div class="log-container" id="log-container">
+    <div class="loading">加载中...</div>
+</div>
+
+<style>
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.log-filters {
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+}
+
+.log-filters label {
+    margin-right: 20px;
+    cursor: pointer;
+    color: #c9d1d9;
+}
+
+.log-filters input[type="checkbox"] {
+    margin-right: 5px;
+}
+
+.log-container {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 15px;
+    max-height: 600px;
+    overflow-y: auto;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+}
+
+.log-entry {
+    padding: 8px;
+    margin-bottom: 5px;
+    border-left: 3px solid #30363d;
+    background: #161b22;
+}
+
+.log-entry.info {
+    border-left-color: #58a6ff;
+}
+
+.log-entry.warning {
+    border-left-color: #d29922;
+}
+
+.log-entry.error {
+    border-left-color: #f85149;
+}
+
+.log-time {
+    color: #8b949e;
+    margin-right: 10px;
+}
+
+.log-level {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+.log-level.info {
+    background: #1f6feb;
+    color: white;
+}
+
+.log-level.warning {
+    background: #9e6a03;
+    color: white;
+}
+
+.log-level.error {
+    background: #da3633;
+    color: white;
+}
+
+.log-message {
+    color: #c9d1d9;
+}
+
+.loading {
+    text-align: center;
+    color: #8b949e;
+    padding: 20px;
+}
+
+.btn-secondary {
+    padding: 8px 16px;
+    background: #21262d;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.btn-secondary:hover {
+    background: #30363d;
+}
+</style>
+
+<script>
+let autoRefresh = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    refreshLogs();
+    // 每 5 秒自动刷新
+    autoRefresh = setInterval(refreshLogs, 5000);
+});
+
+function refreshLogs() {
+    fetch('/api/system-logs')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('log-container');
+            if (data.logs && data.logs.length > 0) {
+                container.innerHTML = data.logs.map(log => `
+                    <div class="log-entry ${log.level}" data-level="${log.level}">
+                        <span class="log-time">${log.time}</span>
+                        <span class="log-level ${log.level}">${log.level.toUpperCase()}</span>
+                        <span class="log-message">${escapeHtml(log.message)}</span>
+                    </div>
+                `).join('');
+                // 滚动到底部
+                container.scrollTop = container.scrollHeight;
+            } else {
+                container.innerHTML = '<div class="loading">暂无日志</div>';
+            }
+            filterLogs();
+        })
+        .catch(err => {
+            console.error('加载日志失败:', err);
+            document.getElementById('log-container').innerHTML =
+                '<div class="loading">加载失败</div>';
+        });
+}
+
+function filterLogs() {
+    const showInfo = document.getElementById('filter-info').checked;
+    const showWarning = document.getElementById('filter-warning').checked;
+    const showError = document.getElementById('filter-error').checked;
+
+    document.querySelectorAll('.log-entry').forEach(entry => {
+        const level = entry.dataset.level;
+        const show = (level === 'info' && showInfo) ||
+                     (level === 'warning' && showWarning) ||
+                     (level === 'error' && showError);
+        entry.style.display = show ? 'block' : 'none';
+    });
+}
+
+function clearLogs() {
+    if (!confirm('确定要清空所有系统日志吗？')) return;
+
+    fetch('/api/system-logs/clear', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                refreshLogs();
+            } else {
+                alert('清空失败');
+            }
+        });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

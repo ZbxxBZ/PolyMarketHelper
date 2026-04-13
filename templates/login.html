@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - Polymarket 自动交易</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .login-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 40px;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+        }
+        .login-container h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #58a6ff;
+        }
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .login-form input {
+            padding: 12px;
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+            font-size: 16px;
+        }
+        .login-form input:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+        .login-form button {
+            padding: 12px;
+            background: #238636;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .login-form button:hover {
+            background: #2ea043;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>🔒 Polymarket 自动交易</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <form method="POST" class="login-form">
+            <input type="password" name="password" placeholder="请输入访问密码" required autofocus>
+            <button type="submit">登录</button>
+        </form>
+    </div>
+</body>
+</html>

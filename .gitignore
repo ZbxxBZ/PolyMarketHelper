@@ -1,0 +1,43 @@
+# 环境变量和配置
+.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.spec
+
+# 数据库
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 日志
+*.log
+
+# Claude
+.claude/
+
+# Docker
+.dockerignore
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*.tar
