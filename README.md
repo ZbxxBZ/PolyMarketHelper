@@ -17,7 +17,7 @@
 
 1. **克隆项目**
 ```bash
-git clone https://github.com/你的用户名/PolyMarket.git
+git clone https://github.com/ZbxxBZ/PolyMarket.git
 cd PolyMarket
 ```
 
