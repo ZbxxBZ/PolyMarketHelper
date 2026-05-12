@@ -49,18 +49,64 @@ def _get_log_dir():
 
 
 _log_format = "%(asctime)s [%(name)s] %(levelname)s: %(message)s"
+_log_formatter = logging.Formatter(_log_format)
 logging.basicConfig(level=logging.INFO, format=_log_format)
 
-_file_handler = logging.handlers.TimedRotatingFileHandler(
-    os.path.join(_get_log_dir(), "app.log"),
-    when="midnight",
-    backupCount=30,
-    encoding="utf-8",
-)
-_file_handler.setLevel(logging.INFO)
-_file_handler.setFormatter(logging.Formatter(_log_format))
-_file_handler.suffix = "%Y-%m-%d"
-logging.getLogger().addHandler(_file_handler)
+LOG_ROTATE_CHOICES = {
+    "H": ("每小时", "%Y-%m-%d_%H"),
+    "6H": ("每 6 小时", "%Y-%m-%d_%H"),
+    "12H": ("每 12 小时", "%Y-%m-%d_%H"),
+    "midnight": ("每天（午夜）", "%Y-%m-%d"),
+    "W0": ("每周（周一）", "%Y-%m-%d"),
+}
+
+_file_handler = None
+
+
+def _build_file_handler(when, backup_count):
+    interval = 1
+    suffix = "%Y-%m-%d"
+    w = when.upper()
+    if w == "6H":
+        base_when, interval = "H", 6
+    elif w == "12H":
+        base_when, interval = "H", 12
+    elif w == "H":
+        base_when, interval, suffix = "H", 1, "%Y-%m-%d_%H"
+    elif w == "W0":
+        base_when = "W0"
+    else:
+        base_when = "midnight"
+
+    if base_when == "H":
+        suffix = "%Y-%m-%d_%H"
+
+    handler = logging.handlers.TimedRotatingFileHandler(
+        os.path.join(_get_log_dir(), "app.log"),
+        when=base_when,
+        interval=interval,
+        backupCount=backup_count,
+        encoding="utf-8",
+    )
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(_log_formatter)
+    handler.suffix = suffix
+    return handler
+
+
+def reconfigure_file_handler(when=None, backup_count=None):
+    global _file_handler
+    when = when or config.LOG_ROTATE_WHEN
+    backup_count = backup_count if backup_count is not None else config.LOG_BACKUP_COUNT
+    root = logging.getLogger()
+    if _file_handler is not None:
+        root.removeHandler(_file_handler)
+        _file_handler.close()
+    _file_handler = _build_file_handler(when, backup_count)
+    root.addHandler(_file_handler)
+
+
+reconfigure_file_handler()
 
 memory_handler = MemoryLogHandler()
 memory_handler.setLevel(logging.INFO)
@@ -167,6 +213,19 @@ def api_positions():
     return jsonify({"positions": positions, "error": None})
 
 
+@app.route("/api/orderbook/<token_id>")
+def api_orderbook(token_id):
+    if not config.is_configured():
+        return jsonify({"error": "未配置凭证"})
+    token_id = token_id.strip()
+    if not token_id:
+        return jsonify({"error": "缺少 token_id"})
+    summary = pm.get_orderbook_summary(token_id)
+    if summary is None:
+        return jsonify({"error": "查询盘口失败"})
+    return jsonify(summary)
+
+
 @app.route("/rules")
 def rules_page():
     if not config.is_configured():
@@ -239,69 +298,74 @@ def log_page():
     return render_template("log.html", logs=logs)
 
 
+def _update_env_file(updates):
+    """更新 .env 文件中的多个键（dict: key -> value）"""
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    lines = []
+    seen = set()
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                matched = False
+                for k, v in updates.items():
+                    if line.startswith(f"{k}="):
+                        lines.append(f"{k}={v}\n")
+                        seen.add(k)
+                        matched = True
+                        break
+                if not matched:
+                    lines.append(line)
+    for k, v in updates.items():
+        if k not in seen:
+            lines.append(f"{k}={v}\n")
+    with open(env_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+
 @app.route("/settings", methods=["GET", "POST"])
 def settings_page():
     if request.method == "POST":
-        # 更新监控间隔
+        updates = {}
+
         new_interval = int(request.form.get("monitor_interval", 30))
         if new_interval < 1:
             flash("监控间隔必须大于 0 秒", "error")
         else:
-            # 更新 .env 文件
-            env_path = os.path.join(os.path.dirname(__file__), ".env")
-            lines = []
-            updated = False
-
-            if os.path.exists(env_path):
-                with open(env_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        if line.startswith("MONITOR_INTERVAL="):
-                            lines.append(f"MONITOR_INTERVAL={new_interval}\n")
-                            updated = True
-                        else:
-                            lines.append(line)
-
-            if not updated:
-                lines.append(f"MONITOR_INTERVAL={new_interval}\n")
-
-            with open(env_path, "w", encoding="utf-8") as f:
-                f.writelines(lines)
-
-            # 更新运行中的监控间隔
+            updates["MONITOR_INTERVAL"] = new_interval
             monitor.interval = new_interval
             config.MONITOR_INTERVAL = new_interval
-
             flash(f"监控间隔已更新为 {new_interval} 秒", "success")
 
-        # 更新密码
         new_password = request.form.get("web_password", "").strip()
-        env_path = os.path.join(os.path.dirname(__file__), ".env")
-        lines = []
-        updated = False
-
-        if os.path.exists(env_path):
-            with open(env_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    if line.startswith("WEB_PASSWORD="):
-                        lines.append(f"WEB_PASSWORD={new_password}\n")
-                        updated = True
-                    else:
-                        lines.append(line)
-
-        if not updated:
-            lines.append(f"WEB_PASSWORD={new_password}\n")
-
-        with open(env_path, "w", encoding="utf-8") as f:
-            f.writelines(lines)
-
+        updates["WEB_PASSWORD"] = new_password
         config.WEB_PASSWORD = new_password
-        flash("密码已更新", "success")
 
+        new_when = request.form.get("log_rotate_when", "midnight").strip()
+        if new_when not in LOG_ROTATE_CHOICES:
+            new_when = "midnight"
+        try:
+            new_backup = int(request.form.get("log_backup_count", "30"))
+            new_backup = max(1, min(new_backup, 365))
+        except ValueError:
+            new_backup = 30
+
+        if new_when != config.LOG_ROTATE_WHEN or new_backup != config.LOG_BACKUP_COUNT:
+            config.LOG_ROTATE_WHEN = new_when
+            config.LOG_BACKUP_COUNT = new_backup
+            updates["LOG_ROTATE_WHEN"] = new_when
+            updates["LOG_BACKUP_COUNT"] = new_backup
+            reconfigure_file_handler(new_when, new_backup)
+            flash(f"日志轮转已更新: {LOG_ROTATE_CHOICES[new_when][0]}，保留 {new_backup} 份", "success")
+
+        _update_env_file(updates)
         return redirect(url_for("settings_page"))
 
     return render_template("settings.html",
                          current_interval=config.MONITOR_INTERVAL,
-                         current_password=config.WEB_PASSWORD)
+                         current_password=config.WEB_PASSWORD,
+                         current_log_when=config.LOG_ROTATE_WHEN,
+                         current_log_backup=config.LOG_BACKUP_COUNT,
+                         log_rotate_choices=LOG_ROTATE_CHOICES)
 
 
 @app.route("/system-log")
@@ -319,6 +383,43 @@ def api_clear_system_logs():
     system_logs.clear()
     logging.info("系统日志已清空")
     return jsonify({"success": True})
+
+
+@app.route("/api/log-files")
+def api_log_files():
+    log_dir = _get_log_dir()
+    files = []
+    try:
+        for name in os.listdir(log_dir):
+            path = os.path.join(log_dir, name)
+            if not os.path.isfile(path):
+                continue
+            if not name.startswith("app.log"):
+                continue
+            stat = os.stat(path)
+            files.append({
+                "name": name,
+                "size": stat.st_size,
+                "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+            })
+    except OSError as e:
+        return jsonify({"error": str(e), "files": []})
+    files.sort(key=lambda x: x["mtime"], reverse=True)
+    return jsonify({"files": files})
+
+
+@app.route("/api/log-files/<path:filename>")
+def api_log_download(filename):
+    from flask import send_from_directory, abort
+    if "/" in filename or "\\" in filename or filename.startswith(".") or ".." in filename:
+        abort(400)
+    if not filename.startswith("app.log"):
+        abort(400)
+    log_dir = _get_log_dir()
+    full = os.path.join(log_dir, filename)
+    if not os.path.isfile(full):
+        abort(404)
+    return send_from_directory(log_dir, filename, as_attachment=True)
 
 
 if __name__ == "__main__":

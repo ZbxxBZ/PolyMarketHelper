@@ -7,7 +7,8 @@
     <h1>系统日志</h1>
     <div class="header-actions">
         <button class="btn" onclick="refreshLogs()">刷新</button>
-        <button class="btn-secondary" onclick="clearLogs()">清空日志</button>
+        <button class="btn-secondary" onclick="toggleAutoRefresh()" id="auto-refresh-btn">暂停自动刷新</button>
+        <button class="btn-secondary" onclick="clearLogs()">清空内存日志</button>
     </div>
 </div>
 
@@ -21,10 +22,30 @@
     <label>
         <input type="checkbox" id="filter-error" checked onchange="filterLogs()"> ERROR
     </label>
+    <label style="margin-left:auto;">
+        刷新间隔:
+        <select id="refresh-interval" onchange="changeRefreshInterval()">
+            <option value="2000">2 秒</option>
+            <option value="5000" selected>5 秒</option>
+            <option value="10000">10 秒</option>
+            <option value="30000">30 秒</option>
+            <option value="0">关闭</option>
+        </select>
+    </label>
 </div>
 
 <div class="log-container" id="log-container">
     <div class="loading">加载中...</div>
+</div>
+
+<div class="card" style="margin-top:20px;">
+    <h2>日志文件下载</h2>
+    <p style="color:#8b949e;font-size:13px;margin-bottom:12px;">
+        文件存放路径：<code>data/logs/</code>。按设置的轮转周期自动切分，超过保留份数的旧文件会被删除。
+    </p>
+    <div id="log-files-list" class="log-files-list">
+        <div class="loading">加载中...</div>
+    </div>
 </div>
 
 <style>
@@ -69,6 +90,15 @@
     background: #161b22;
 }
 
+.log-message {
+    color: #c9d1d9;
+    white-space: pre-wrap;
+    word-break: break-word;
+    display: block;
+    margin-top: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
 .log-entry.info {
     border-left-color: #58a6ff;
 }
@@ -110,10 +140,6 @@
     color: white;
 }
 
-.log-message {
-    color: #c9d1d9;
-}
-
 .loading {
     text-align: center;
     color: #8b949e;
@@ -132,16 +158,63 @@
 .btn-secondary:hover {
     background: #30363d;
 }
+
+.log-files-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.log-file-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+.log-file-row .name { flex: 1; font-family: 'Consolas', 'Monaco', monospace; color: #c9d1d9; word-break: break-all; }
+.log-file-row .meta { color: #8b949e; white-space: nowrap; }
+.log-file-row a { color: #58a6ff; text-decoration: none; padding: 4px 10px; border: 1px solid #30363d; border-radius: 4px; }
+.log-file-row a:hover { background: #21262d; }
 </style>
 
 <script>
 let autoRefresh = null;
+let refreshMs = 5000;
 
 document.addEventListener('DOMContentLoaded', () => {
     refreshLogs();
-    // 每 5 秒自动刷新
-    autoRefresh = setInterval(refreshLogs, 5000);
+    refreshLogFiles();
+    startAutoRefresh();
 });
+
+function startAutoRefresh() {
+    if (autoRefresh) clearInterval(autoRefresh);
+    if (refreshMs > 0) {
+        autoRefresh = setInterval(() => { refreshLogs(); refreshLogFiles(); }, refreshMs);
+    }
+    const btn = document.getElementById('auto-refresh-btn');
+    if (btn) btn.textContent = refreshMs > 0 ? '暂停自动刷新' : '恢复自动刷新';
+}
+
+function toggleAutoRefresh() {
+    if (autoRefresh) {
+        clearInterval(autoRefresh);
+        autoRefresh = null;
+        document.getElementById('auto-refresh-btn').textContent = '恢复自动刷新';
+    } else {
+        startAutoRefresh();
+    }
+}
+
+function changeRefreshInterval() {
+    refreshMs = parseInt(document.getElementById('refresh-interval').value, 10) || 0;
+    startAutoRefresh();
+}
 
 function refreshLogs() {
     fetch('/api/system-logs')
@@ -156,7 +229,6 @@ function refreshLogs() {
                         <span class="log-message">${escapeHtml(log.message)}</span>
                     </div>
                 `).join('');
-                // 滚动到底部
                 container.scrollTop = container.scrollHeight;
             } else {
                 container.innerHTML = '<div class="loading">暂无日志</div>';
@@ -168,6 +240,40 @@ function refreshLogs() {
             document.getElementById('log-container').innerHTML =
                 '<div class="loading">加载失败</div>';
         });
+}
+
+function refreshLogFiles() {
+    fetch('/api/log-files')
+        .then(r => r.json())
+        .then(data => {
+            const list = document.getElementById('log-files-list');
+            if (data.error) {
+                list.innerHTML = `<div class="loading">加载失败: ${escapeHtml(data.error)}</div>`;
+                return;
+            }
+            if (!data.files || data.files.length === 0) {
+                list.innerHTML = '<div class="loading">暂无日志文件</div>';
+                return;
+            }
+            list.innerHTML = data.files.map(f => `
+                <div class="log-file-row">
+                    <span class="name">${escapeHtml(f.name)}</span>
+                    <span class="meta">${formatSize(f.size)}</span>
+                    <span class="meta">${escapeHtml(f.mtime)}</span>
+                    <a href="/api/log-files/${encodeURIComponent(f.name)}" download>下载</a>
+                </div>
+            `).join('');
+        })
+        .catch(err => {
+            document.getElementById('log-files-list').innerHTML =
+                `<div class="loading">网络错误: ${escapeHtml(String(err))}</div>`;
+        });
+}
+
+function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(2) + ' MB';
 }
 
 function filterLogs() {

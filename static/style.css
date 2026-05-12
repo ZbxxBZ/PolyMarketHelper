@@ -309,10 +309,11 @@ body {
 }
 
 .message {
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    max-width: 360px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 13px;
+    color: #c9d1d9;
 }
 
 /* Setup 页面 */
@@ -390,4 +391,165 @@ body {
     border-radius: 6px;
     font-size: 13px;
     color: #d29922;
+}
+
+/* 表格滚动容器 */
+.table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .navbar {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 10px 12px;
+        gap: 10px;
+    }
+
+    .nav-brand {
+        font-size: 16px;
+    }
+
+    .nav-links {
+        order: 3;
+        width: 100%;
+        overflow-x: auto;
+        gap: 2px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .nav-links a {
+        padding: 6px 10px;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    .nav-status {
+        margin-left: auto;
+        font-size: 12px;
+    }
+
+    .container {
+        margin: 12px auto;
+        padding: 0 12px;
+    }
+
+    .page-header {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .page-header h1 {
+        font-size: 20px;
+    }
+
+    .card {
+        padding: 14px;
+    }
+
+    .form-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .form-group {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .data-table {
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        white-space: nowrap;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 8px 10px;
+        font-size: 13px;
+    }
+
+    .market-name {
+        max-width: 160px;
+    }
+
+    .message {
+        max-width: 220px;
+        white-space: pre-wrap;
+    }
+
+    .actions {
+        flex-wrap: wrap;
+    }
+
+    .summary {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .btn {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+
+    .header-actions {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .log-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .log-filters label {
+        margin-right: 10px;
+    }
+
+    .log-container {
+        max-height: 460px;
+        font-size: 12px;
+        padding: 10px;
+    }
+
+    .log-entry {
+        padding: 6px;
+    }
+
+    .log-time,
+    .log-level {
+        font-size: 11px;
+    }
+
+    .log-file-row {
+        flex-wrap: wrap;
+    }
+
+    .log-file-row .name {
+        flex-basis: 100%;
+    }
+
+    .setup-container {
+        margin: 20px auto;
+        padding: 0 12px;
+    }
+
+    .settings-form {
+        padding: 18px;
+    }
+
+    .form-actions {
+        flex-direction: column;
+    }
+
+    .form-actions .btn-primary,
+    .form-actions .btn-secondary {
+        width: 100%;
+        text-align: center;
+    }
 }

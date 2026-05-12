@@ -23,6 +23,23 @@
             <small>修改后需要重新登录。留空则任何人都可以访问。</small>
         </div>
 
+        <div class="form-group">
+            <label for="log_rotate_when">日志轮转周期</label>
+            <select id="log_rotate_when" name="log_rotate_when">
+                {% for k, v in log_rotate_choices.items() %}
+                <option value="{{ k }}" {% if k == current_log_when %}selected{% endif %}>{{ v[0] }}</option>
+                {% endfor %}
+            </select>
+            <small>控制日志文件多久切分一次。切分后旧文件以日期后缀保存。</small>
+        </div>
+
+        <div class="form-group">
+            <label for="log_backup_count">保留份数</label>
+            <input type="number" id="log_backup_count" name="log_backup_count"
+                   value="{{ current_log_backup }}" min="1" max="365" required>
+            <small>超过此数量的旧日志文件将被自动删除。</small>
+        </div>
+
         <div class="form-actions">
             <button type="submit" class="btn-primary">保存设置</button>
             <a href="{{ url_for('positions_page') }}" class="btn-secondary">取消</a>

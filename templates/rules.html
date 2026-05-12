@@ -43,7 +43,7 @@
             </div>
             <div class="form-group">
                 <label>卖出方式</label>
-                <select name="sell_mode" id="sell_mode" onchange="togglePriceOffset()">
+                <select name="sell_mode" id="sell_mode" onchange="onSellModeChange()">
                     <option value="market">市价卖出（立即成交）</option>
                     <option value="limit">限价卖出（挂单等待）</option>
                 </select>
@@ -53,13 +53,88 @@
                 <input type="number" name="price_offset" step="0.01" min="-0.10" max="0.10" value="0">
             </div>
         </div>
+        <div id="orderbook_hint" class="orderbook-hint" style="display:none;"></div>
         <button type="submit" class="btn">添加规则</button>
     </form>
+    <style>
+    .orderbook-hint {
+        margin: 10px 0;
+        padding: 10px 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        background: #161b22;
+        border: 1px solid #30363d;
+        color: #c9d1d9;
+    }
+    .orderbook-hint.warn { border-color: #d29922; color: #d29922; }
+    .orderbook-hint.error { border-color: #f85149; color: #f85149; }
+    .orderbook-hint.ok { border-color: #238636; color: #7ee787; }
+    </style>
     <script>
     function togglePriceOffset() {
         var mode = document.getElementById('sell_mode').value;
         document.getElementById('price_offset_group').style.display = mode === 'limit' ? 'flex' : 'none';
     }
+
+    let _obTimer = null;
+    function onSellModeChange() {
+        togglePriceOffset();
+        refreshOrderbookHint();
+    }
+
+    function refreshOrderbookHint() {
+        const hint = document.getElementById('orderbook_hint');
+        const mode = document.getElementById('sell_mode').value;
+        const tokenId = document.querySelector('input[name="token_id"]').value.trim();
+
+        if (mode !== 'market' || !tokenId) {
+            hint.style.display = 'none';
+            return;
+        }
+
+        hint.style.display = 'block';
+        hint.className = 'orderbook-hint';
+        hint.textContent = '查询盘口深度中...';
+
+        fetch('/api/orderbook/' + encodeURIComponent(tokenId))
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    hint.className = 'orderbook-hint error';
+                    hint.textContent = '盘口查询失败: ' + data.error;
+                    return;
+                }
+                const bid = data.best_bid || 0;
+                const size = data.bid_total_size || 0;
+                const value = data.bid_total_value || 0;
+                const base = `最高买价 ${bid.toFixed(4)} · 买方总量 ${size.toFixed(2)} 份 · 总额 ${value.toFixed(2)} USDC`;
+
+                if (size <= 0) {
+                    hint.className = 'orderbook-hint error';
+                    hint.textContent = '盘口无买单，市价单无法成交。建议改用限价挂单。';
+                } else if (value < 1) {
+                    hint.className = 'orderbook-hint warn';
+                    hint.textContent = base + ' — 流动性不足 $1，可能无法按预期成交';
+                } else {
+                    hint.className = 'orderbook-hint ok';
+                    hint.textContent = base;
+                }
+            })
+            .catch(err => {
+                hint.className = 'orderbook-hint error';
+                hint.textContent = '盘口查询网络错误: ' + err;
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        togglePriceOffset();
+        const tokenInput = document.querySelector('input[name="token_id"]');
+        tokenInput.addEventListener('input', function() {
+            clearTimeout(_obTimer);
+            _obTimer = setTimeout(refreshOrderbookHint, 500);
+        });
+        refreshOrderbookHint();
+    });
     </script>
     </form>
 </div>
