@@ -1,4 +1,5 @@
 import logging
+import logging.handlers
 import os
 import sys
 import time
@@ -13,19 +14,19 @@ from monitor import PriceMonitor
 import polymarket_client as pm
 
 
-# 内存日志队列（最多保留 500 条）
 system_logs = deque(maxlen=500)
 
 
 class MemoryLogHandler(logging.Handler):
-    """自定义日志处理器，将日志保存到内存"""
     def emit(self, record):
-        log_entry = {
+        message = record.getMessage()
+        if record.exc_info:
+            message += "\n" + logging.Formatter().formatException(record.exc_info)
+        system_logs.append({
             'time': datetime.fromtimestamp(record.created).strftime('%Y-%m-%d %H:%M:%S'),
             'level': record.levelname.lower(),
-            'message': record.getMessage()
-        }
-        system_logs.append(log_entry)
+            'message': message,
+        })
 
 
 def resource_path(relative_path):
@@ -36,13 +37,31 @@ def resource_path(relative_path):
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
 
-# 日志配置
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-)
 
-# 添加内存日志处理器
+def _get_log_dir():
+    if getattr(sys, 'frozen', False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    log_dir = os.path.join(base, "data", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    return log_dir
+
+
+_log_format = "%(asctime)s [%(name)s] %(levelname)s: %(message)s"
+logging.basicConfig(level=logging.INFO, format=_log_format)
+
+_file_handler = logging.handlers.TimedRotatingFileHandler(
+    os.path.join(_get_log_dir(), "app.log"),
+    when="midnight",
+    backupCount=30,
+    encoding="utf-8",
+)
+_file_handler.setLevel(logging.INFO)
+_file_handler.setFormatter(logging.Formatter(_log_format))
+_file_handler.suffix = "%Y-%m-%d"
+logging.getLogger().addHandler(_file_handler)
+
 memory_handler = MemoryLogHandler()
 memory_handler.setLevel(logging.INFO)
 logging.getLogger().addHandler(memory_handler)

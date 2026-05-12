@@ -84,6 +84,7 @@ def get_positions_with_prices():
     返回: (list[dict], error_msg|None)
     """
     try:
+        logger.info("查询持仓: user=%s", config.FUNDER_ADDRESS)
         params = {
             "user": config.FUNDER_ADDRESS.lower(),
             "sizeThreshold": 0,
@@ -153,10 +154,13 @@ def get_price(token_id):
         client = _get_client()
         mid = client.get_midpoint(token_id)
         if isinstance(mid, dict):
-            return float(mid.get("mid", 0)), None
-        return float(mid) if mid else 0.0, None
+            price = float(mid.get("mid", 0))
+        else:
+            price = float(mid) if mid else 0.0
+        logger.info("查询中间价: token=%s, price=%.4f", token_id, price)
+        return price, None
     except Exception as e:
-        logger.exception("获取价格失败: %s", token_id)
+        logger.exception("获取价格失败: token=%s", token_id)
         return 0.0, str(e)
 
 
@@ -175,70 +179,156 @@ def get_prices_batch(token_ids):
             else:
                 prices[tid] = float(mid) if mid else 0.0
         except Exception:
+            logger.exception("批量查价失败: token=%s", tid)
             prices[tid] = 0.0
     return prices
+
+
+def get_orderbook_summary(token_id):
+    """查询盘口买方深度（便于判断市价单能否成交）
+
+    返回: dict(best_bid, bid_total_size, bid_total_value) 或 None
+    """
+    try:
+        client = _get_client()
+        book = client.get_order_book(token_id)
+        bids = getattr(book, "bids", None) or []
+        if not bids:
+            logger.info("盘口无买单: token=%s", token_id)
+            return {"best_bid": 0.0, "bid_total_size": 0.0, "bid_total_value": 0.0}
+
+        total_size = 0.0
+        total_value = 0.0
+        best_bid = 0.0
+        for lvl in bids:
+            price = float(getattr(lvl, "price", 0))
+            size = float(getattr(lvl, "size", 0))
+            total_size += size
+            total_value += price * size
+            if price > best_bid:
+                best_bid = price
+        logger.info(
+            "盘口快照: token=%s, best_bid=%.4f, 总买量=%.2f, 总买额=%.2f USDC",
+            token_id, best_bid, total_size, total_value,
+        )
+        return {
+            "best_bid": best_bid,
+            "bid_total_size": total_size,
+            "bid_total_value": total_value,
+        }
+    except Exception:
+        logger.exception("查询盘口失败: token=%s", token_id)
+        return None
+
+
+def _parse_fill(resp):
+    """从下单响应中解析成交量、收款金额、订单状态"""
+    if not isinstance(resp, dict):
+        return {"success": False, "filled_size": 0.0, "received": 0.0, "status": "", "order_id": "", "raw": resp}
+
+    filled = 0.0
+    received = 0.0
+    # py-clob-client 响应字段：makingAmount(卖出份数), takingAmount(获得 USDC)
+    for key in ("makingAmount", "making_amount", "filled_size", "size_matched"):
+        v = resp.get(key)
+        if v is not None:
+            try:
+                filled = float(v)
+                break
+            except (TypeError, ValueError):
+                pass
+    for key in ("takingAmount", "taking_amount"):
+        v = resp.get(key)
+        if v is not None:
+            try:
+                received = float(v)
+                break
+            except (TypeError, ValueError):
+                pass
+
+    return {
+        "success": bool(resp.get("success", False)),
+        "filled_size": filled,
+        "received": received,
+        "status": resp.get("status", ""),
+        "order_id": resp.get("orderID", "") or resp.get("orderId", ""),
+        "error": resp.get("errorMsg", "") or resp.get("error", ""),
+        "raw": resp,
+    }
 
 
 def sell(token_id, size, price):
     """提交 GTC 限价卖单
 
-    返回: (response_dict, error_msg|None)
+    返回: (result_dict, error_msg|None)
     """
     try:
         from py_clob_client.clob_types import OrderArgs, OrderType, PartialCreateOrderOptions
         from py_clob_client.order_builder.constants import SELL
 
         client = _get_client()
-
-        # 从 Gamma API 获取市场参数
         market_info = _get_market_info(token_id)
         tick_size = market_info["tick_size"]
         neg_risk = market_info["neg_risk"]
 
-        order_args = OrderArgs(
-            token_id=token_id,
-            price=price,
-            size=size,
-            side=SELL,
+        logger.info(
+            "提交限价卖单: token=%s, size=%s, price=%s, tick_size=%s, neg_risk=%s",
+            token_id, size, price, tick_size, neg_risk,
         )
+
+        order_args = OrderArgs(token_id=token_id, price=price, size=size, side=SELL)
         options = PartialCreateOrderOptions(tick_size=tick_size, neg_risk=neg_risk)
         signed = client.create_order(order_args, options=options)
         resp = client.post_order(signed, OrderType.GTC)
-        logger.info("卖单提交成功: token=%s, size=%s, price=%s, resp=%s",
-                     token_id, size, price, resp)
-        return resp, None
+        logger.info("限价卖单响应: token=%s, resp=%s", token_id, resp)
+
+        result = _parse_fill(resp)
+        if not result["success"] and result.get("error"):
+            return result, result["error"]
+        return result, None
 
     except Exception as e:
-        logger.exception("卖单提交失败: token=%s", token_id)
+        logger.exception("限价卖单提交失败: token=%s", token_id)
         return None, str(e)
 
 
 def market_sell(token_id, size):
-    """提交 FOK 市价卖单（立即以盘口价成交，不成交则取消）
+    """提交 FAK 市价卖单（能成交多少成交多少，剩余撤单）
 
-    返回: (response_dict, error_msg|None)
+    返回: (result_dict, error_msg|None)
+        result_dict: success, filled_size, received, status, order_id, raw
     """
     try:
         from py_clob_client.clob_types import MarketOrderArgs, OrderType, PartialCreateOrderOptions
         from py_clob_client.order_builder.constants import SELL
 
         client = _get_client()
-
         market_info = _get_market_info(token_id)
         tick_size = market_info["tick_size"]
         neg_risk = market_info["neg_risk"]
 
-        order_args = MarketOrderArgs(
-            token_id=token_id,
-            amount=size,
-            side=SELL,
+        book = get_orderbook_summary(token_id)
+        if book is not None and book["bid_total_size"] <= 0:
+            msg = "盘口无买单，市价单无法成交"
+            logger.warning("%s: token=%s", msg, token_id)
+            return {"success": False, "filled_size": 0.0, "received": 0.0,
+                    "status": "no_liquidity", "order_id": "", "raw": None}, msg
+
+        logger.info(
+            "提交市价卖单(FAK): token=%s, size=%s, tick_size=%s, neg_risk=%s",
+            token_id, size, tick_size, neg_risk,
         )
+
+        order_args = MarketOrderArgs(token_id=token_id, amount=size, side=SELL)
         options = PartialCreateOrderOptions(tick_size=tick_size, neg_risk=neg_risk)
         signed = client.create_market_order(order_args, options=options)
-        resp = client.post_order(signed, OrderType.FOK)
-        logger.info("市价卖单提交成功: token=%s, size=%s, resp=%s",
-                     token_id, size, resp)
-        return resp, None
+        resp = client.post_order(signed, OrderType.FAK)
+        logger.info("市价卖单响应: token=%s, resp=%s", token_id, resp)
+
+        result = _parse_fill(resp)
+        if not result["success"] and result.get("error"):
+            return result, result["error"]
+        return result, None
 
     except Exception as e:
         logger.exception("市价卖单提交失败: token=%s", token_id)

@@ -83,7 +83,6 @@ class PriceMonitor:
             rule["id"], rule["rule_type"], rule["threshold"], trigger_price,
         )
 
-        # 获取当前持仓量
         positions, err = pm.get_positions_with_prices()
         if err:
             db.add_log(
@@ -93,7 +92,6 @@ class PriceMonitor:
             )
             return
 
-        # 找到对应持仓
         pos = None
         for p in positions:
             if p["token_id"] == rule["token_id"]:
@@ -110,47 +108,64 @@ class PriceMonitor:
             return
 
         import math
-        sell_amount = pos["size"] * rule["sell_percent"] / 100
-        # 向下取整到小数点后两位，确保不会超出持仓
+        position_size = pos["size"]
+        sell_amount = position_size * rule["sell_percent"] / 100
         sell_amount = math.floor(sell_amount * 100) / 100
         if sell_amount <= 0:
-            sell_amount = math.floor(pos["size"] * 100) / 100
+            sell_amount = math.floor(position_size * 100) / 100
 
         sell_mode = rule.get("sell_mode", "limit")
+        logger.info(
+            "准备卖出: rule=%d, 持仓=%.4f, 计划卖出=%.4f (%.1f%%), 模式=%s",
+            rule["id"], position_size, sell_amount, rule["sell_percent"], sell_mode,
+        )
 
         if sell_mode == "market":
-            # 市价卖出（FOK），立即以盘口价成交
-            resp, err = pm.market_sell(rule["token_id"], sell_amount)
+            result, err = pm.market_sell(rule["token_id"], sell_amount)
             price_desc = "市价"
         else:
-            # 限价卖出（GTC）
             price_offset = rule.get("price_offset", 0)
             sell_price = round(trigger_price + price_offset, 2)
             if sell_price < 0.01:
                 sell_price = 0.01
             if sell_price > 0.99:
                 sell_price = 0.99
-            resp, err = pm.sell(rule["token_id"], sell_amount, sell_price)
+            result, err = pm.sell(rule["token_id"], sell_amount, sell_price)
             price_desc = f"{sell_price}"
 
-        if err:
-            db.add_log(
-                rule["id"], rule["token_id"], rule["market_name"],
-                rule["rule_type"], rule["threshold"], trigger_price,
-                rule["sell_percent"], sell_amount, "error", f"卖出失败: {err}",
-            )
-            if sell_mode == "market":
-                # 市价单失败，保持规则启用，下次轮询再试
-                logger.info("规则 #%d 市价卖出失败，保持启用，下次重试", rule["id"])
-                return
-        else:
-            db.add_log(
-                rule["id"], rule["token_id"], rule["market_name"],
-                rule["rule_type"], rule["threshold"], trigger_price,
-                rule["sell_percent"], sell_amount, "success",
-                f"卖单已提交: {sell_amount} 份 @ {price_desc}",
-            )
+        filled = float(result.get("filled_size", 0)) if isinstance(result, dict) else 0.0
+        received = float(result.get("received", 0)) if isinstance(result, dict) else 0.0
+        remaining = max(position_size - filled, 0)
 
-        # 成功后或限价单失败后禁用规则
+        if err and filled <= 0:
+            msg = f"卖出失败: {err}。持仓 {position_size:.2f}，未成交"
+            db.add_log(
+                rule["id"], rule["token_id"], rule["market_name"],
+                rule["rule_type"], rule["threshold"], trigger_price,
+                rule["sell_percent"], sell_amount, "error", msg,
+            )
+            logger.warning("规则 #%d %s", rule["id"], msg)
+            if sell_mode == "market":
+                logger.info("规则 #%d 市价卖出未成交，保持启用，下次重试", rule["id"])
+                return
+        elif filled > 0 and filled < sell_amount - 0.001:
+            msg = (f"部分成交 @ {price_desc}: 已卖 {filled:.2f} / 目标 {sell_amount:.2f}，"
+                   f"收到 {received:.2f} USDC，剩余持仓 {remaining:.2f}")
+            db.add_log(
+                rule["id"], rule["token_id"], rule["market_name"],
+                rule["rule_type"], rule["threshold"], trigger_price,
+                rule["sell_percent"], filled, "partial", msg,
+            )
+            logger.info("规则 #%d %s", rule["id"], msg)
+        else:
+            msg = (f"卖单已提交 @ {price_desc}: 卖出 {filled if filled > 0 else sell_amount:.2f}，"
+                   f"收到 {received:.2f} USDC，剩余持仓 {remaining:.2f}")
+            db.add_log(
+                rule["id"], rule["token_id"], rule["market_name"],
+                rule["rule_type"], rule["threshold"], trigger_price,
+                rule["sell_percent"], filled if filled > 0 else sell_amount, "success", msg,
+            )
+            logger.info("规则 #%d %s", rule["id"], msg)
+
         db.disable_rule(rule["id"])
         logger.info("规则 #%d 已自动禁用", rule["id"])
