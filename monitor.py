@@ -115,13 +115,14 @@ class PriceMonitor:
             sell_amount = math.floor(position_size * 100) / 100
 
         sell_mode = rule.get("sell_mode", "limit")
+        neg_risk = pos.get("neg_risk", False)
         logger.info(
-            "准备卖出: rule=%d, 持仓=%.4f, 计划卖出=%.4f (%.1f%%), 模式=%s",
-            rule["id"], position_size, sell_amount, rule["sell_percent"], sell_mode,
+            "准备卖出: rule=%d, 持仓=%.4f, 计划卖出=%.4f (%.1f%%), 模式=%s, neg_risk=%s",
+            rule["id"], position_size, sell_amount, rule["sell_percent"], sell_mode, neg_risk,
         )
 
         if sell_mode == "market":
-            result, err = pm.market_sell(rule["token_id"], sell_amount)
+            result, err = pm.market_sell(rule["token_id"], sell_amount, neg_risk=neg_risk)
             price_desc = "市价"
         else:
             price_offset = rule.get("price_offset", 0)
@@ -130,7 +131,7 @@ class PriceMonitor:
                 sell_price = 0.01
             if sell_price > 0.99:
                 sell_price = 0.99
-            result, err = pm.sell(rule["token_id"], sell_amount, sell_price)
+            result, err = pm.sell(rule["token_id"], sell_amount, sell_price, neg_risk=neg_risk)
             price_desc = f"{sell_price}"
 
         filled = float(result.get("filled_size", 0)) if isinstance(result, dict) else 0.0

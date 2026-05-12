@@ -59,6 +59,7 @@ def _get_market_info(token_id):
         return _market_info_cache[token_id]
 
     info = {"tick_size": "0.01", "neg_risk": False}
+    can_cache = True
 
     try:
         client = _get_client()
@@ -73,8 +74,10 @@ def _get_market_info(token_id):
         info["neg_risk"] = bool(neg_risk)
     except Exception:
         logger.warning("CLOB get_neg_risk 失败，使用默认值 False: %s", token_id)
+        can_cache = False
 
-    _market_info_cache[token_id] = info
+    if can_cache:
+        _market_info_cache[token_id] = info
     return info
 
 
@@ -257,7 +260,7 @@ def _parse_fill(resp):
     }
 
 
-def sell(token_id, size, price):
+def sell(token_id, size, price, neg_risk=None):
     """提交 GTC 限价卖单
 
     返回: (result_dict, error_msg|None)
@@ -269,7 +272,8 @@ def sell(token_id, size, price):
         client = _get_client()
         market_info = _get_market_info(token_id)
         tick_size = market_info["tick_size"]
-        neg_risk = market_info["neg_risk"]
+        if neg_risk is None:
+            neg_risk = market_info["neg_risk"]
 
         logger.info(
             "提交限价卖单: token=%s, size=%s, price=%s, tick_size=%s, neg_risk=%s",
@@ -292,7 +296,7 @@ def sell(token_id, size, price):
         return None, str(e)
 
 
-def market_sell(token_id, size):
+def market_sell(token_id, size, neg_risk=None):
     """提交 FAK 市价卖单（能成交多少成交多少，剩余撤单）
 
     返回: (result_dict, error_msg|None)
@@ -305,7 +309,8 @@ def market_sell(token_id, size):
         client = _get_client()
         market_info = _get_market_info(token_id)
         tick_size = market_info["tick_size"]
-        neg_risk = market_info["neg_risk"]
+        if neg_risk is None:
+            neg_risk = market_info["neg_risk"]
 
         book = get_orderbook_summary(token_id)
         if book is not None and book["bid_total_size"] <= 0:
