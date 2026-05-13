@@ -8,6 +8,7 @@ import config
 logger = logging.getLogger(__name__)
 
 _client = None
+_public_client = None
 _lock = threading.Lock()
 
 DATA_API_URL = "https://data-api.polymarket.com"
@@ -15,6 +16,12 @@ GAMMA_API_URL = "https://gamma-api.polymarket.com"
 
 # 缓存市场信息（tick_size, neg_risk）
 _market_info_cache = {}
+
+
+def _field(obj, name, default=None):
+    if isinstance(obj, dict):
+        return obj.get(name, default)
+    return getattr(obj, name, default)
 
 
 def _get_client():
@@ -38,17 +45,38 @@ def _get_client():
             funder=config.FUNDER_ADDRESS,
             retry_on_error=True,
         )
-        c.set_api_creds(c.create_or_derive_api_key())
+        try:
+            c.set_api_creds(c.derive_api_key())
+        except Exception:
+            logger.info("derive API key 失败，尝试创建新的 API key")
+            c.set_api_creds(c.create_api_key())
         _client = c
         logger.info("ClobClient V2 初始化成功")
         return _client
 
 
+def _get_public_client():
+    """懒初始化只读 ClobClient（不需要私钥/API 凭证）"""
+    global _public_client
+    if _public_client is not None:
+        return _public_client
+
+    with _lock:
+        if _public_client is not None:
+            return _public_client
+
+        from py_clob_client_v2.client import ClobClient
+
+        _public_client = ClobClient(config.CLOB_API_URL, chain_id=config.CHAIN_ID)
+        return _public_client
+
+
 def reset_client():
     """重置客户端（配置更新后调用）"""
-    global _client
+    global _client, _public_client
     with _lock:
         _client = None
+        _public_client = None
 
 
 def _get_market_info(token_id):
@@ -64,14 +92,14 @@ def _get_market_info(token_id):
     can_cache = True
 
     try:
-        client = _get_client()
+        client = _get_public_client()
         tick_size = client.get_tick_size(token_id)
         info["tick_size"] = str(tick_size)
     except Exception:
         logger.warning("CLOB get_tick_size 失败，使用默认值 0.01: %s", token_id)
 
     try:
-        client = _get_client()
+        client = _get_public_client()
         neg_risk = client.get_neg_risk(token_id)
         info["neg_risk"] = bool(neg_risk)
     except Exception:
@@ -156,7 +184,7 @@ def get_price(token_id):
     返回: (price: float, error_msg|None)
     """
     try:
-        client = _get_client()
+        client = _get_public_client()
         mid = client.get_midpoint(token_id)
         if isinstance(mid, dict):
             price = float(mid.get("mid", 0))
@@ -175,7 +203,7 @@ def get_prices_batch(token_ids):
     返回: dict[token_id -> float]
     """
     prices = {}
-    client = _get_client()
+    client = _get_public_client()
     for tid in token_ids:
         try:
             mid = client.get_midpoint(tid)
@@ -195,9 +223,9 @@ def get_orderbook_summary(token_id):
     返回: dict(best_bid, bid_total_size, bid_total_value) 或 None
     """
     try:
-        client = _get_client()
+        client = _get_public_client()
         book = client.get_order_book(token_id)
-        bids = getattr(book, "bids", None) or []
+        bids = _field(book, "bids", []) or []
         if not bids:
             logger.info("盘口无买单: token=%s", token_id)
             return {"best_bid": 0.0, "bid_total_size": 0.0, "bid_total_value": 0.0}
@@ -206,8 +234,8 @@ def get_orderbook_summary(token_id):
         total_value = 0.0
         best_bid = 0.0
         for lvl in bids:
-            price = float(getattr(lvl, "price", 0))
-            size = float(getattr(lvl, "size", 0))
+            price = float(_field(lvl, "price", 0))
+            size = float(_field(lvl, "size", 0))
             total_size += size
             total_value += price * size
             if price > best_bid:
