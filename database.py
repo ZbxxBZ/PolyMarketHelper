@@ -146,6 +146,26 @@ def add_log(rule_id, token_id, market_name, rule_type, threshold,
     conn.close()
 
 
+def update_latest_submitted_log(rule_id, token_id, sell_amount, status, message):
+    conn = get_connection()
+    row = conn.execute(
+        """SELECT id FROM execution_log
+           WHERE rule_id = ? AND token_id = ? AND status = 'submitted'
+           ORDER BY created_at DESC LIMIT 1""",
+        (rule_id, token_id),
+    ).fetchone()
+    if row:
+        conn.execute(
+            """UPDATE execution_log
+               SET sell_amount = ?, status = ?, message = ?, created_at = ?
+               WHERE id = ?""",
+            (sell_amount, status, message, time.time(), row["id"]),
+        )
+        conn.commit()
+    conn.close()
+    return bool(row)
+
+
 def get_logs(limit=100):
     conn = get_connection()
     rows = conn.execute(

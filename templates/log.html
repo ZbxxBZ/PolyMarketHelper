@@ -41,6 +41,8 @@
                 <span class="badge badge-active">成功</span>
                 {% elif l.status == 'error' %}
                 <span class="badge badge-danger">失败</span>
+                {% elif l.status == 'submitted' %}
+                <span class="badge badge-inactive">待确认</span>
                 {% else %}
                 <span class="badge badge-inactive">{{ l.status }}</span>
                 {% endif %}

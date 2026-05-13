@@ -15,6 +15,7 @@ class PriceMonitor:
         self.interval = interval
         self._stop_event = threading.Event()
         self._thread = None
+        self._pending_market_sells = {}
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -82,6 +83,7 @@ class PriceMonitor:
             "规则触发: id=%d, type=%s, threshold=%.4f, trigger_price=%.4f",
             rule["id"], rule["rule_type"], rule["threshold"], trigger_price,
         )
+        pending_key = (rule["id"], rule["token_id"])
 
         positions, err = pm.get_positions_with_prices()
         if err:
@@ -99,6 +101,23 @@ class PriceMonitor:
                 break
 
         if not pos or pos["size"] <= 0:
+            pending = self._pending_market_sells.pop(pending_key, None)
+            if pending:
+                msg = (f"已成交 @ 市价: 卖出 {pending['amount']:.2f}，"
+                       "收到待确认，剩余持仓 0.00")
+                if not db.update_latest_submitted_log(
+                    rule["id"], rule["token_id"], pending["amount"], "success", msg
+                ):
+                    db.add_log(
+                        rule["id"], rule["token_id"], rule["market_name"],
+                        rule["rule_type"], rule["threshold"], trigger_price,
+                        rule["sell_percent"], pending["amount"], "success", msg,
+                    )
+                db.disable_rule(rule["id"])
+                logger.info("规则 #%d %s", rule["id"], msg)
+                logger.info("规则 #%d 已自动禁用", rule["id"])
+                return
+
             db.add_log(
                 rule["id"], rule["token_id"], rule["market_name"],
                 rule["rule_type"], rule["threshold"], trigger_price,
@@ -116,6 +135,19 @@ class PriceMonitor:
 
         sell_mode = rule.get("sell_mode", "limit")
         neg_risk = pos.get("neg_risk", False)
+
+        pending = self._pending_market_sells.get(pending_key)
+        if sell_mode == "market" and pending:
+            elapsed = time.time() - pending["created_at"]
+            if elapsed < 120:
+                logger.info(
+                    "规则 #%d 市价卖单仍在待确认中，已等待 %.0f 秒，跳过重复下单",
+                    rule["id"], elapsed,
+                )
+                return
+            logger.info("规则 #%d 市价卖单待确认超时，允许重新尝试", rule["id"])
+            self._pending_market_sells.pop(pending_key, None)
+
         logger.info(
             "准备卖出: rule=%d, 持仓=%.4f, 计划卖出=%.4f (%.1f%%), 模式=%s, neg_risk=%s",
             rule["id"], position_size, sell_amount, rule["sell_percent"], sell_mode, neg_risk,
@@ -160,6 +192,32 @@ class PriceMonitor:
                     order_status = f"{order_status or 'unknown'}:position_delta"
 
         if err and filled <= 0:
+            err_text = str(err)
+            if sell_mode == "market" and "not enough balance" in err_text.lower():
+                refreshed, refresh_err = pm.get_positions_with_prices()
+                if not refresh_err:
+                    current_size = 0.0
+                    for p in refreshed:
+                        if p["token_id"] == rule["token_id"]:
+                            current_size = float(p.get("size", 0))
+                            break
+                    if current_size <= 0.001:
+                        msg = (f"已成交 @ 市价: 卖出 {sell_amount:.2f}，"
+                               "收到待确认，剩余持仓 0.00")
+                        self._pending_market_sells.pop(pending_key, None)
+                        if not db.update_latest_submitted_log(
+                            rule["id"], rule["token_id"], sell_amount, "success", msg
+                        ):
+                            db.add_log(
+                                rule["id"], rule["token_id"], rule["market_name"],
+                                rule["rule_type"], rule["threshold"], trigger_price,
+                                rule["sell_percent"], sell_amount, "success", msg,
+                            )
+                        db.disable_rule(rule["id"])
+                        logger.info("规则 #%d %s", rule["id"], msg)
+                        logger.info("规则 #%d 已自动禁用", rule["id"])
+                        return
+
             msg = f"卖出失败: {err}。持仓 {position_size:.2f}，未成交"
             db.add_log(
                 rule["id"], rule["token_id"], rule["market_name"],
@@ -171,6 +229,7 @@ class PriceMonitor:
                 logger.info("规则 #%d 市价卖出未成交，保持启用，下次重试", rule["id"])
                 return
         elif filled > 0 and filled < sell_amount - 0.001:
+            self._pending_market_sells.pop(pending_key, None)
             received_desc = f"{received:.2f} USDC" if received_known else "待确认"
             msg = (f"部分成交 @ {price_desc}: 已卖 {filled:.2f} / 目标 {sell_amount:.2f}，"
                    f"收到 {received_desc}，剩余持仓 {remaining:.2f}")
@@ -181,6 +240,7 @@ class PriceMonitor:
             )
             logger.info("规则 #%d %s", rule["id"], msg)
         elif filled_known and filled >= sell_amount - 0.001:
+            self._pending_market_sells.pop(pending_key, None)
             received_desc = f"{received:.2f} USDC" if received_known else "待确认"
             msg = (f"已成交 @ {price_desc}: 卖出 {filled:.2f}，"
                    f"收到 {received_desc}，剩余持仓 {remaining:.2f}")
@@ -200,6 +260,11 @@ class PriceMonitor:
             )
             logger.info("规则 #%d %s", rule["id"], msg)
             if sell_mode == "market":
+                self._pending_market_sells[pending_key] = {
+                    "amount": sell_amount,
+                    "created_at": time.time(),
+                    "order_id": result.get("order_id", "") if isinstance(result, dict) else "",
+                }
                 logger.info("规则 #%d 市价卖出成交量未确认，保持启用，下次复查持仓", rule["id"])
                 return
 
