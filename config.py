@@ -15,6 +15,7 @@ PRIVATE_KEY = os.getenv("PRIVATE_KEY", "").strip()
 FUNDER_ADDRESS = os.getenv("FUNDER_ADDRESS", "").strip()
 WEB_PASSWORD = os.getenv("WEB_PASSWORD", "").strip()
 MONITOR_INTERVAL = int(os.getenv("MONITOR_INTERVAL", "30"))
+MARKET_SELL_CONFIRM_TIMEOUT = max(3, int(os.getenv("MARKET_SELL_CONFIRM_TIMEOUT", "15")))
 LOG_ROTATE_WHEN = os.getenv("LOG_ROTATE_WHEN", "midnight").strip() or "midnight"
 LOG_BACKUP_COUNT = int(os.getenv("LOG_BACKUP_COUNT", "30"))
 

@@ -4,6 +4,7 @@ import time
 
 import database as db
 import polymarket_client as pm
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -139,10 +140,10 @@ class PriceMonitor:
         pending = self._pending_market_sells.get(pending_key)
         if sell_mode == "market" and pending:
             elapsed = time.time() - pending["created_at"]
-            if elapsed < 120:
+            if elapsed < config.MARKET_SELL_CONFIRM_TIMEOUT:
                 logger.info(
-                    "规则 #%d 市价卖单仍在待确认中，已等待 %.0f 秒，跳过重复下单",
-                    rule["id"], elapsed,
+                    "规则 #%d 市价卖单仍在待确认中，已等待 %.0f/%d 秒，跳过重复下单",
+                    rule["id"], elapsed, config.MARKET_SELL_CONFIRM_TIMEOUT,
                 )
                 return
             logger.info("规则 #%d 市价卖单待确认超时，允许重新尝试", rule["id"])
