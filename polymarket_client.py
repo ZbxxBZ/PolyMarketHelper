@@ -24,6 +24,21 @@ def _field(obj, name, default=None):
     return getattr(obj, name, default)
 
 
+def _parse_clob_amount(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return None
+        raw = float(value)
+        # CLOB v2 returns fixed-math amounts with 6 decimals, e.g. "5000000" = 5.
+        if value.lstrip("-").isdigit() and abs(raw) >= 10000:
+            return raw / 1_000_000
+        return raw
+    return float(value)
+
+
 def _get_client():
     """懒初始化 ClobClient（线程安全）"""
     global _client
@@ -278,33 +293,39 @@ def get_orderbook_summary(token_id):
 def _parse_fill(resp):
     """从下单响应中解析成交量、收款金额、订单状态"""
     if not isinstance(resp, dict):
-        return {"success": False, "filled_size": 0.0, "received": 0.0, "status": "", "order_id": "", "raw": resp}
+        return {"success": False, "filled_size": 0.0, "received": 0.0,
+                "status": "", "order_id": "", "raw": resp}
 
-    filled = 0.0
-    received = 0.0
-    # py-clob-client-v2 响应字段：makingAmount(卖出份数), takingAmount(获得 USDC)
+    status = str(resp.get("status", "") or "").lower()
+    making_amount = None
+    taking_amount = None
     for key in ("makingAmount", "making_amount", "filled_size", "size_matched"):
-        v = resp.get(key)
-        if v is not None:
-            try:
-                filled = float(v)
-                break
-            except (TypeError, ValueError):
-                pass
+        try:
+            making_amount = _parse_clob_amount(resp.get(key))
+        except (TypeError, ValueError):
+            making_amount = None
+        if making_amount is not None:
+            break
     for key in ("takingAmount", "taking_amount"):
-        v = resp.get(key)
-        if v is not None:
-            try:
-                received = float(v)
-                break
-            except (TypeError, ValueError):
-                pass
+        try:
+            taking_amount = _parse_clob_amount(resp.get(key))
+        except (TypeError, ValueError):
+            taking_amount = None
+        if taking_amount is not None:
+            break
+
+    filled_known = status == "matched" and making_amount is not None
+    received_known = status == "matched" and taking_amount is not None
 
     return {
         "success": bool(resp.get("success", False)),
-        "filled_size": filled,
-        "received": received,
-        "status": resp.get("status", ""),
+        "filled_size": making_amount if filled_known else 0.0,
+        "received": taking_amount if received_known else 0.0,
+        "submitted_size": making_amount or 0.0,
+        "submitted_value": taking_amount or 0.0,
+        "filled_known": filled_known,
+        "received_known": received_known,
+        "status": status,
         "order_id": resp.get("orderID", "") or resp.get("orderId", ""),
         "error": resp.get("errorMsg", "") or resp.get("error", ""),
         "raw": resp,

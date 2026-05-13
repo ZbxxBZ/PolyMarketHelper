@@ -136,7 +136,28 @@ class PriceMonitor:
 
         filled = float(result.get("filled_size", 0)) if isinstance(result, dict) else 0.0
         received = float(result.get("received", 0)) if isinstance(result, dict) else 0.0
+        filled_known = bool(result.get("filled_known", False)) if isinstance(result, dict) else False
+        received_known = bool(result.get("received_known", False)) if isinstance(result, dict) else False
+        order_status = str(result.get("status", "")) if isinstance(result, dict) else ""
         remaining = max(position_size - filled, 0)
+
+        if isinstance(result, dict) and result.get("success") and not filled_known and sell_mode == "market":
+            # Some CLOB responses acknowledge a matched FAK order without fill amounts.
+            # Re-read positions once and infer the fill from the position delta.
+            time.sleep(2)
+            refreshed, refresh_err = pm.get_positions_with_prices()
+            if not refresh_err:
+                current_size = 0.0
+                for p in refreshed:
+                    if p["token_id"] == rule["token_id"]:
+                        current_size = float(p.get("size", 0))
+                        break
+                inferred = max(position_size - current_size, 0.0)
+                if inferred > 0.001:
+                    filled = inferred
+                    filled_known = True
+                    remaining = max(current_size, 0.0)
+                    order_status = f"{order_status or 'unknown'}:position_delta"
 
         if err and filled <= 0:
             msg = f"卖出失败: {err}。持仓 {position_size:.2f}，未成交"
@@ -150,23 +171,37 @@ class PriceMonitor:
                 logger.info("规则 #%d 市价卖出未成交，保持启用，下次重试", rule["id"])
                 return
         elif filled > 0 and filled < sell_amount - 0.001:
+            received_desc = f"{received:.2f} USDC" if received_known else "待确认"
             msg = (f"部分成交 @ {price_desc}: 已卖 {filled:.2f} / 目标 {sell_amount:.2f}，"
-                   f"收到 {received:.2f} USDC，剩余持仓 {remaining:.2f}")
+                   f"收到 {received_desc}，剩余持仓 {remaining:.2f}")
             db.add_log(
                 rule["id"], rule["token_id"], rule["market_name"],
                 rule["rule_type"], rule["threshold"], trigger_price,
                 rule["sell_percent"], filled, "partial", msg,
             )
             logger.info("规则 #%d %s", rule["id"], msg)
-        else:
-            msg = (f"卖单已提交 @ {price_desc}: 卖出 {filled if filled > 0 else sell_amount:.2f}，"
-                   f"收到 {received:.2f} USDC，剩余持仓 {remaining:.2f}")
+        elif filled_known and filled >= sell_amount - 0.001:
+            received_desc = f"{received:.2f} USDC" if received_known else "待确认"
+            msg = (f"已成交 @ {price_desc}: 卖出 {filled:.2f}，"
+                   f"收到 {received_desc}，剩余持仓 {remaining:.2f}")
             db.add_log(
                 rule["id"], rule["token_id"], rule["market_name"],
                 rule["rule_type"], rule["threshold"], trigger_price,
-                rule["sell_percent"], filled if filled > 0 else sell_amount, "success", msg,
+                rule["sell_percent"], filled, "success", msg,
             )
             logger.info("规则 #%d %s", rule["id"], msg)
+        else:
+            msg = (f"卖单已提交 @ {price_desc}: 目标卖出 {sell_amount:.2f}，"
+                   f"成交量待确认，订单状态={order_status or 'unknown'}")
+            db.add_log(
+                rule["id"], rule["token_id"], rule["market_name"],
+                rule["rule_type"], rule["threshold"], trigger_price,
+                rule["sell_percent"], 0, "submitted", msg,
+            )
+            logger.info("规则 #%d %s", rule["id"], msg)
+            if sell_mode == "market":
+                logger.info("规则 #%d 市价卖出成交量未确认，保持启用，下次复查持仓", rule["id"])
+                return
 
         db.disable_rule(rule["id"])
         logger.info("规则 #%d 已自动禁用", rule["id"])
