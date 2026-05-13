@@ -27,18 +27,20 @@ def _get_client():
         if _client is not None:
             return _client
 
-        from py_clob_client.client import ClobClient
+        from py_clob_client_v2.client import ClobClient
+        from py_clob_client_v2.order_utils import SignatureTypeV2
 
         c = ClobClient(
             config.CLOB_API_URL,
             key=config.PRIVATE_KEY,
             chain_id=config.CHAIN_ID,
-            signature_type=1,
+            signature_type=SignatureTypeV2.POLY_PROXY,
             funder=config.FUNDER_ADDRESS,
+            retry_on_error=True,
         )
-        c.set_api_creds(c.create_or_derive_api_creds())
+        c.set_api_creds(c.create_or_derive_api_key())
         _client = c
-        logger.info("ClobClient 初始化成功")
+        logger.info("ClobClient V2 初始化成功")
         return _client
 
 
@@ -231,7 +233,7 @@ def _parse_fill(resp):
 
     filled = 0.0
     received = 0.0
-    # py-clob-client 响应字段：makingAmount(卖出份数), takingAmount(获得 USDC)
+    # py-clob-client-v2 响应字段：makingAmount(卖出份数), takingAmount(获得 USDC)
     for key in ("makingAmount", "making_amount", "filled_size", "size_matched"):
         v = resp.get(key)
         if v is not None:
@@ -266,8 +268,8 @@ def sell(token_id, size, price, neg_risk=None):
     返回: (result_dict, error_msg|None)
     """
     try:
-        from py_clob_client.clob_types import OrderArgs, OrderType, PartialCreateOrderOptions
-        from py_clob_client.order_builder.constants import SELL
+        from py_clob_client_v2.clob_types import OrderArgs, OrderType, PartialCreateOrderOptions
+        from py_clob_client_v2.order_builder.constants import SELL
 
         client = _get_client()
         market_info = _get_market_info(token_id)
@@ -282,8 +284,11 @@ def sell(token_id, size, price, neg_risk=None):
 
         order_args = OrderArgs(token_id=token_id, price=price, size=size, side=SELL)
         options = PartialCreateOrderOptions(tick_size=tick_size, neg_risk=neg_risk)
-        signed = client.create_order(order_args, options=options)
-        resp = client.post_order(signed, OrderType.GTC)
+        resp = client.create_and_post_order(
+            order_args,
+            options=options,
+            order_type=OrderType.GTC,
+        )
         logger.info("限价卖单响应: token=%s, resp=%s", token_id, resp)
 
         result = _parse_fill(resp)
@@ -303,8 +308,8 @@ def market_sell(token_id, size, neg_risk=None):
         result_dict: success, filled_size, received, status, order_id, raw
     """
     try:
-        from py_clob_client.clob_types import MarketOrderArgs, OrderType, PartialCreateOrderOptions
-        from py_clob_client.order_builder.constants import SELL
+        from py_clob_client_v2.clob_types import MarketOrderArgs, OrderType, PartialCreateOrderOptions
+        from py_clob_client_v2.order_builder.constants import SELL
 
         client = _get_client()
         market_info = _get_market_info(token_id)
@@ -324,10 +329,18 @@ def market_sell(token_id, size, neg_risk=None):
             token_id, size, tick_size, neg_risk,
         )
 
-        order_args = MarketOrderArgs(token_id=token_id, amount=size, side=SELL)
+        order_args = MarketOrderArgs(
+            token_id=token_id,
+            amount=size,
+            side=SELL,
+            order_type=OrderType.FAK,
+        )
         options = PartialCreateOrderOptions(tick_size=tick_size, neg_risk=neg_risk)
-        signed = client.create_market_order(order_args, options=options)
-        resp = client.post_order(signed, OrderType.FAK)
+        resp = client.create_and_post_market_order(
+            order_args,
+            options=options,
+            order_type=OrderType.FAK,
+        )
         logger.info("市价卖单响应: token=%s, resp=%s", token_id, resp)
 
         result = _parse_fill(resp)
