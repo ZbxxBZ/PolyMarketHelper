@@ -65,8 +65,15 @@ def init_db():
             FOREIGN KEY (rule_id) REFERENCES auto_sell_rules(id)
         );
     """)
+    _ensure_column(conn, "execution_log", "order_id", "TEXT")
     conn.commit()
     conn.close()
+
+
+def _ensure_column(conn, table, column, definition):
+    cols = [row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 # --- 规则 CRUD ---
@@ -132,38 +139,81 @@ def disable_rule(rule_id):
 # --- 执行日志 ---
 
 def add_log(rule_id, token_id, market_name, rule_type, threshold,
-            trigger_price, sell_percent, sell_amount, status, message):
+            trigger_price, sell_percent, sell_amount, status, message, order_id=""):
     conn = get_connection()
     conn.execute(
         """INSERT INTO execution_log
            (rule_id, token_id, market_name, rule_type, threshold,
-            trigger_price, sell_percent, sell_amount, status, message, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            trigger_price, sell_percent, sell_amount, status, message, created_at, order_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (rule_id, token_id, market_name, rule_type, threshold,
-         trigger_price, sell_percent, sell_amount, status, message, time.time()),
+         trigger_price, sell_percent, sell_amount, status, message, time.time(), order_id),
     )
     conn.commit()
     conn.close()
 
 
-def update_latest_submitted_log(rule_id, token_id, sell_amount, status, message):
+def update_latest_submitted_log(rule_id, token_id, sell_amount, status, message, order_id=None):
     conn = get_connection()
-    row = conn.execute(
-        """SELECT id FROM execution_log
-           WHERE rule_id = ? AND token_id = ? AND status = 'submitted'
-           ORDER BY created_at DESC LIMIT 1""",
-        (rule_id, token_id),
-    ).fetchone()
+    if rule_id is None:
+        row = conn.execute(
+            """SELECT id FROM execution_log
+               WHERE rule_id IS NULL AND token_id = ? AND status = 'submitted'
+               ORDER BY created_at DESC LIMIT 1""",
+            (token_id,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """SELECT id FROM execution_log
+               WHERE rule_id = ? AND token_id = ? AND status = 'submitted'
+               ORDER BY created_at DESC LIMIT 1""",
+            (rule_id, token_id),
+        ).fetchone()
     if row:
-        conn.execute(
-            """UPDATE execution_log
-               SET sell_amount = ?, status = ?, message = ?, created_at = ?
-               WHERE id = ?""",
-            (sell_amount, status, message, time.time(), row["id"]),
-        )
+        if order_id is None:
+            conn.execute(
+                """UPDATE execution_log
+                   SET sell_amount = ?, status = ?, message = ?, created_at = ?
+                   WHERE id = ?""",
+                (sell_amount, status, message, time.time(), row["id"]),
+            )
+        else:
+            conn.execute(
+                """UPDATE execution_log
+                   SET sell_amount = ?, status = ?, message = ?, created_at = ?, order_id = ?
+                   WHERE id = ?""",
+                (sell_amount, status, message, time.time(), order_id, row["id"]),
+            )
         conn.commit()
     conn.close()
     return bool(row)
+
+
+def get_pending_fill_logs(limit=20):
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT * FROM execution_log
+           WHERE status = 'success'
+             AND order_id IS NOT NULL
+             AND order_id != ''
+             AND message LIKE '%收到待确认%'
+           ORDER BY created_at DESC LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def update_log_fill_amount(log_id, sell_amount, received, message):
+    conn = get_connection()
+    conn.execute(
+        """UPDATE execution_log
+           SET sell_amount = ?, message = ?, created_at = ?
+           WHERE id = ?""",
+        (sell_amount, message, time.time(), log_id),
+    )
+    conn.commit()
+    conn.close()
 
 
 def get_logs(limit=100):

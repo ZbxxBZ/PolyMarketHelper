@@ -39,6 +39,28 @@ def _parse_clob_amount(value):
     return float(value)
 
 
+def _iter_dicts(value):
+    if isinstance(value, dict):
+        yield value
+        for item in value.values():
+            yield from _iter_dicts(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _iter_dicts(item)
+
+
+def _first_amount(items, keys):
+    for item in items:
+        for key in keys:
+            try:
+                amount = _parse_clob_amount(item.get(key))
+            except (AttributeError, TypeError, ValueError):
+                amount = None
+            if amount is not None:
+                return amount
+    return None
+
+
 def _get_client():
     """懒初始化 ClobClient（线程安全）"""
     global _client
@@ -330,6 +352,68 @@ def _parse_fill(resp):
         "error": resp.get("errorMsg", "") or resp.get("error", ""),
         "raw": resp,
     }
+
+
+def _extract_fill_amounts(payload):
+    items = list(_iter_dicts(payload))
+    filled = _first_amount(items, (
+        "makingAmount", "making_amount", "makerAmountFilled", "maker_amount_filled",
+        "filled_size", "size_matched", "matched_size", "size",
+    ))
+    received = _first_amount(items, (
+        "takingAmount", "taking_amount", "takerAmountFilled", "taker_amount_filled",
+        "proceeds", "received", "cashAmount", "cash_amount",
+    ))
+
+    if received is None and filled is not None:
+        price = _first_amount(items, ("price", "fill_price", "avg_price", "average_price"))
+        if price is not None:
+            received = filled * price
+
+    return filled, received
+
+
+def lookup_order_fill(order_id, token_id=None):
+    """查询订单/成交记录并返回成交量与收到金额。返回 (result|None, error|None)。"""
+    if not order_id:
+        return None, "missing order_id"
+
+    try:
+        from py_clob_client_v2.clob_types import TradeParams
+
+        client = _get_client()
+        payloads = []
+
+        try:
+            payloads.append(client.get_order(order_id))
+        except Exception as e:
+            logger.info("查询订单详情失败，继续查 trades: order_id=%s, err=%s", order_id, e)
+
+        try:
+            payloads.extend(client.get_trades(TradeParams(id=order_id), only_first_page=True))
+        except Exception as e:
+            logger.info("按订单 ID 查询 trades 失败: order_id=%s, err=%s", order_id, e)
+
+        if token_id:
+            try:
+                payloads.extend(client.get_trades(TradeParams(asset_id=token_id), only_first_page=True))
+            except Exception as e:
+                logger.info("按 token 查询 trades 失败: token=%s, err=%s", token_id, e)
+
+        for payload in payloads:
+            filled, received = _extract_fill_amounts(payload)
+            if filled is not None and received is not None and filled > 0:
+                return {
+                    "filled_size": filled,
+                    "received": received,
+                    "raw": payload,
+                }, None
+
+        return None, "成交金额尚未出现在订单/交易接口"
+
+    except Exception as e:
+        logger.exception("回填成交金额查询失败: order_id=%s", order_id)
+        return None, str(e)
 
 
 def sell(token_id, size, price, neg_risk=None):

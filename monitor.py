@@ -55,6 +55,8 @@ class PriceMonitor:
                 time.sleep(1)
 
     def _check_rules(self):
+        self._backfill_pending_fills()
+
         rules = db.get_enabled_rules()
         if not rules:
             return
@@ -77,6 +79,25 @@ class PriceMonitor:
 
             if triggered:
                 self._execute_sell(rule, cur_price)
+
+    def _backfill_pending_fills(self):
+        logs = db.get_pending_fill_logs()
+        for log in logs:
+            order_id = log.get("order_id", "")
+            result, err = pm.lookup_order_fill(order_id, token_id=log.get("token_id"))
+            if err or not result:
+                logger.info("成交金额仍待确认: log=%s, order=%s, err=%s", log["id"], order_id, err)
+                continue
+
+            filled = float(result.get("filled_size", 0))
+            received = float(result.get("received", 0))
+            if filled <= 0 or received <= 0:
+                continue
+
+            msg = f"已成交 @ 市价: 卖出 {filled:.2f}，收到 {received:.2f} USDC，剩余持仓 0.00"
+            db.update_log_fill_amount(log["id"], filled, received, msg)
+            logger.info("成交金额已回填: log=%s, order=%s, filled=%.4f, received=%.4f",
+                        log["id"], order_id, filled, received)
 
     def _execute_sell(self, rule, trigger_price):
         """执行卖出并记录日志"""
@@ -107,12 +128,14 @@ class PriceMonitor:
                 msg = (f"已成交 @ 市价: 卖出 {pending['amount']:.2f}，"
                        "收到待确认，剩余持仓 0.00")
                 if not db.update_latest_submitted_log(
-                    rule["id"], rule["token_id"], pending["amount"], "success", msg
+                    rule["id"], rule["token_id"], pending["amount"], "success", msg,
+                    pending.get("order_id", ""),
                 ):
                     db.add_log(
                         rule["id"], rule["token_id"], rule["market_name"],
                         rule["rule_type"], rule["threshold"], trigger_price,
                         rule["sell_percent"], pending["amount"], "success", msg,
+                        pending.get("order_id", ""),
                     )
                 db.disable_rule(rule["id"])
                 logger.info("规则 #%d %s", rule["id"], msg)
@@ -207,12 +230,14 @@ class PriceMonitor:
                                "收到待确认，剩余持仓 0.00")
                         self._pending_market_sells.pop(pending_key, None)
                         if not db.update_latest_submitted_log(
-                            rule["id"], rule["token_id"], sell_amount, "success", msg
+                            rule["id"], rule["token_id"], sell_amount, "success", msg,
+                            result.get("order_id", "") if isinstance(result, dict) else "",
                         ):
                             db.add_log(
                                 rule["id"], rule["token_id"], rule["market_name"],
                                 rule["rule_type"], rule["threshold"], trigger_price,
                                 rule["sell_percent"], sell_amount, "success", msg,
+                                result.get("order_id", "") if isinstance(result, dict) else "",
                             )
                         db.disable_rule(rule["id"])
                         logger.info("规则 #%d %s", rule["id"], msg)
@@ -238,6 +263,7 @@ class PriceMonitor:
                 rule["id"], rule["token_id"], rule["market_name"],
                 rule["rule_type"], rule["threshold"], trigger_price,
                 rule["sell_percent"], filled, "partial", msg,
+                result.get("order_id", "") if isinstance(result, dict) else "",
             )
             logger.info("规则 #%d %s", rule["id"], msg)
         elif filled_known and filled >= sell_amount - 0.001:
@@ -249,6 +275,7 @@ class PriceMonitor:
                 rule["id"], rule["token_id"], rule["market_name"],
                 rule["rule_type"], rule["threshold"], trigger_price,
                 rule["sell_percent"], filled, "success", msg,
+                result.get("order_id", "") if isinstance(result, dict) else "",
             )
             logger.info("规则 #%d %s", rule["id"], msg)
         else:
@@ -258,6 +285,7 @@ class PriceMonitor:
                 rule["id"], rule["token_id"], rule["market_name"],
                 rule["rule_type"], rule["threshold"], trigger_price,
                 rule["sell_percent"], 0, "submitted", msg,
+                result.get("order_id", "") if isinstance(result, dict) else "",
             )
             logger.info("规则 #%d %s", rule["id"], msg)
             if sell_mode == "market":
