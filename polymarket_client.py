@@ -223,12 +223,32 @@ def get_orderbook_summary(token_id):
     返回: dict(best_bid, bid_total_size, bid_total_value) 或 None
     """
     try:
-        client = _get_public_client()
-        book = client.get_order_book(token_id)
+        resp = requests.get(
+            f"{config.CLOB_API_URL}/book",
+            params={"token_id": token_id},
+            timeout=15,
+        )
+        if resp.status_code == 404:
+            logger.info("盘口不存在，市价单暂不可成交: token=%s", token_id)
+            return {
+                "best_bid": 0.0,
+                "bid_total_size": 0.0,
+                "bid_total_value": 0.0,
+                "status": "no_orderbook",
+                "message": "盘口不存在，市价单暂不可成交",
+            }
+        resp.raise_for_status()
+        book = resp.json()
         bids = _field(book, "bids", []) or []
         if not bids:
             logger.info("盘口无买单: token=%s", token_id)
-            return {"best_bid": 0.0, "bid_total_size": 0.0, "bid_total_value": 0.0}
+            return {
+                "best_bid": 0.0,
+                "bid_total_size": 0.0,
+                "bid_total_value": 0.0,
+                "status": "no_bids",
+                "message": "盘口无买单，市价单无法成交",
+            }
 
         total_size = 0.0
         total_value = 0.0
@@ -248,6 +268,7 @@ def get_orderbook_summary(token_id):
             "best_bid": best_bid,
             "bid_total_size": total_size,
             "bid_total_value": total_value,
+            "status": "ok",
         }
     except Exception:
         logger.exception("查询盘口失败: token=%s", token_id)
@@ -347,7 +368,7 @@ def market_sell(token_id, size, neg_risk=None):
 
         book = get_orderbook_summary(token_id)
         if book is not None and book["bid_total_size"] <= 0:
-            msg = "盘口无买单，市价单无法成交"
+            msg = book.get("message") or "盘口无买单，市价单无法成交"
             logger.warning("%s: token=%s", msg, token_id)
             return {"success": False, "filled_size": 0.0, "received": 0.0,
                     "status": "no_liquidity", "order_id": "", "raw": None}, msg
